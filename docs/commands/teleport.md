@@ -1,10 +1,10 @@
 # Teleport
-`/ledger tp`  
+`/vialogium tp`  
 Alias: None  
-Permission: `ledger.commands.tp`
+Permission: `vialogium.commands.tp`
 
 ---
 
-### `/ledger tp <world> <x> <y> <z>`
+### `/vialogium tp <world> <x> <y> <z>`
 This command allows players to teleport to a specific location in a world.
 This is mainly used internally for teleporting to locations in [search](../commands/search.md) results.

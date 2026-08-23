@@ -1,91 +1,110 @@
-[![discord](https://img.shields.io/discord/764543203772334100?label=discord)](https://discord.gg/UxHnDWr)
+## viaLogium
 
-For a much better guide, visit our [wiki](https://quiltservertools.github.io/Ledger/latest/)
+viaLogium is a server-side world change logger for Fabric with search, inspect, rollback/restore, preview, and persistent database history.
 
-## Ledger
+## Install
 
-A world change logging tool for the Fabric modloader.
+- Put viaLogium in your `mods` folder together with Fabric API and `fabric-language-kotlin`.
+- For panel config editing, put `viapanel-2.7.0+mc1.21.11.jar` in the same `mods` folder.
+- On first run, config is generated at `config/vialogium.toml`.
 
-Ledger can be found on Discord at https://discord.gg/GtwDTTr3pe
+## Database backends
 
-### Install
+viaLogium initializes with the backend from `[database_extensions]` and fails startup on DB init errors.
 
-Put Ledger in your mods folder along with Fabric API and fabric-language-kotlin. When you launch your server, the config file will be created automatically.
+Supported values:
+- `SQLITE`
+- `MYSQL`
+- `MARIADB`
+- `POSTGRESQL`
+- `H2`
 
-### Configuration
+Performance note:
+- For one server with local storage, tuned `SQLITE` is usually very good and simplest to operate.
+- `MARIADB` is preferable when you need external DB hosting, larger concurrent workloads, or centralized DB management.
 
-Ledger's configuration file is found at `config/ledger.toml`.
+## MariaDB quick start (5 minutes)
 
-#### Message theme
+1) Create database and user in MariaDB:
 
-Found under `[color]`
-
-Ledger allows for the customisation of the colors used in the messages sent in game. By default, Ledger uses the blue theme. More themes can be found in the [themes](./themes.md) file
-
-#### Search settings
-
-Found under `[search]`
-
-`pageSize` [Default: 8] controls the number of actions displayed per page
-
-#### Database settings
-
-Found under `[database]`
-
-`maxQueueSize` [Default: 50] is the number of items logged before writing to the database
-
-`queueTimeoutSec` [Default: 5] is the maximum amount of time to wait for the queue to fill before writing
-
-#### Filters
-
-These allow you to control what is and is not logged
-
-Found under `[actions]`
-
-All listed here are arrays and are formatted like so:
-```
-array = []
-blocks = ["minecraft:air", "minecraft:dirt"]
+```sql
+CREATE DATABASE vialogium CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'vialogium'@'%' IDENTIFIED BY 'change_me';
+GRANT ALL PRIVILEGES ON vialogium.* TO 'vialogium'@'%';
+FLUSH PRIVILEGES;
 ```
 
-`typeBlacklist` [Default: empty] controls what action types are logged. Hover over the action in a chat message to see the type
+2) In `config/vialogium.toml`, set:
 
-`worldBlacklist` [Default: empty] controls in which dimensions events are logged. Provide
+```toml
+[database_extensions]
+database = "MARIADB"
+url = "127.0.0.1:3306/vialogium"
+username = "vialogium"
+password = "change_me"
+properties = {}
+maxPoolSize = 10
+connectionTimeout = 60000
+maxLifetime = 1800000
+```
 
-`objectBlacklist` [Default: empty] controls which objects are logged. These can be item types, block types or entities
+3) Restart server.
 
-`sourceBlacklist` [Default: empty] controls which sources are logged. Examples are `"lava"` and `"gravity"`
+Tips:
+- If MariaDB runs in Docker on another host, open port `3306` and use `<host>:3306/vialogium`.
+- If connect fails, temporarily switch `database = "SQLITE"` to start server and validate other config.
 
-### Commands
+## Commands (only `/vl`)
 
-#### Inspect
+Root command:
+- `/vl`
 
-`/lg inspect` - toggles inspect mode
-`/lg inspect [on|off]` - enables or disables inspect mode
-`/lg inspect <pos>` - inspects the block at a given position
+Legacy aliases are removed.
+- Removed: `/vlg`, `/lg`, `/vialogium` and short subcommand aliases (`i`, `s`, `n`, `pg`, `rb`, `pv`).
 
-### Search
+Use full subcommands:
+- `/vl inspect [on|off|<x y z>]`
+- `/vl search <params>`
+- `/vl near`
+- `/vl page <number>`
+- `/vl rollback <params>`
+- `/vl restore <params>`
+- `/vl preview rollback <params>`
+- `/vl preview restore <params>`
+- `/vl preview apply`
+- `/vl preview cancel`
+- `/vl purge <params>`
+- `/vl purge --confirm <key>`
+- `/vl status`
+- `/vl tp <world> <x> <y> <z>`
+- `/vl player <profile>`
 
-`/lg search <args>` - searches with the given arguments
+### About `/vl near`
 
-### Rollback
+- `/vl near` performs a search around your current position.
+- Radius is configured by `search.nearRadius` in `config/vialogium.toml`.
+- After running it, use `/vl page <number>` to navigate result pages.
 
-`/lg rollback <args>` - rollbacks with filters specified
+## Permissions
 
-### Page
+Permission prefix:
+- `vialogium.commands.*`
 
-`/lg page <index>`
+Examples:
+- `vialogium.commands.root`
+- `vialogium.commands.search`
+- `vialogium.commands.rollback`
+- `vialogium.commands.purge`
 
-When viewing results, you can use this command to quickly skip to a certain page.
+Networking checks use:
+- `vialogium.networking`
 
-### Permissions
+## viaPanel
 
-All Ledger commands support the LuckPerms API
+viaLogium registers a viaPanel provider with editable sections:
+- Search
+- Database Queue
+- Networking
+- Colors
 
-The permission nodes are formatted as: `ledger.<command>`
-
-All Ledger commands have fallback on permission level 3 should you not wish to have a permissions mod installed.
-
-### Contribute
-
-Ledger is written in Kotlin, and therefore all contributions should be in Kotlin where possible. The exceptions to this are mixins, which must be written in Java.
+The panel supports reload and writes config changes back to runtime values.

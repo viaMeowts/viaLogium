@@ -1,0 +1,59 @@
+package com.viameowts.vialogium.listeners
+
+import com.viameowts.vialogium.ViaLogium
+import com.viameowts.vialogium.actionutils.ActionFactory
+import com.viameowts.vialogium.callbacks.ItemInsertCallback
+import com.viameowts.vialogium.callbacks.ItemRemoveCallback
+import com.viameowts.vialogium.database.ActionQueueService
+import com.viameowts.vialogium.database.DatabaseManager
+import kotlinx.coroutines.launch
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents
+import net.minecraft.core.BlockPos
+import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.item.ItemStack
+
+fun registerWorldEventListeners() {
+    ItemInsertCallback.EVENT.register(::onItemInsert)
+    ItemRemoveCallback.EVENT.register(::onItemRemove)
+    ServerWorldEvents.LOAD.register(::onWorldLoad)
+}
+
+fun onWorldLoad(server: MinecraftServer, world: ServerLevel) {
+    ViaLogium.launch {
+        DatabaseManager.registerWorld(world.dimension().identifier())
+    }
+}
+
+private fun onItemRemove(stack: ItemStack, pos: BlockPos, world: ServerLevel, source: String, entity: LivingEntity?) {
+    if (stack.isEmpty) {
+        return
+    }
+
+    if (entity != null) {
+        ActionQueueService.addToQueue(
+            ActionFactory.itemRemoveAction(world, stack, pos, entity),
+        )
+    } else {
+        ActionQueueService.addToQueue(
+            ActionFactory.itemRemoveAction(world, stack, pos, source),
+        )
+    }
+}
+
+private fun onItemInsert(stack: ItemStack, pos: BlockPos, world: ServerLevel, source: String, entity: LivingEntity?) {
+    if (stack.isEmpty) {
+        return
+    }
+
+    if (entity != null) {
+        ActionQueueService.addToQueue(
+            ActionFactory.itemInsertAction(world, stack, pos, entity),
+        )
+    } else {
+        ActionQueueService.addToQueue(
+            ActionFactory.itemInsertAction(world, stack, pos, source),
+        )
+    }
+}

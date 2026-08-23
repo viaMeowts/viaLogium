@@ -1,6 +1,6 @@
-# Accessing the Ledger Database
+# Accessing the ViaLogium Database
 
-Ledger has a database with access to potentially hundreds of thousands or even millions of data points. This page describes how you can make use of our database in your own mods
+ViaLogium has a database with access to potentially hundreds of thousands or even millions of data points. This page describes how you can make use of our database in your own mods
 
 ### What about extensions?
 
@@ -16,7 +16,7 @@ When searching the database, some parameters can be negative. Making the world p
 
 ## Kotlin
 
-With Kotlin, you can access our database from within the `Ledger` coroutine.
+With Kotlin, you can access our database from within the `ViaLogium` coroutine.
 
 ```kotlin
 object LedgerExamples {
@@ -25,7 +25,7 @@ object LedgerExamples {
         val params = ActionSearchParams.build {
             this.worlds = mutableSetOf(Negatable.allow(targetWorld.getRegistryKey().getValue()))
         }
-        Ledger.launch {
+        ViaLogium.launch {
             // Run the query and select actions on page 1
             val results: SearchResults = DataaseManager.searchActions(targetWorld)
             // Store the actions of the current page in a variable
@@ -48,8 +48,8 @@ object LedgerExamples {
 
 ## Java
 
-With Java, you can access our database with the API which can be obtained with `Ledger.getApi()`.
-You can see the API [here](https://github.com/QuiltServerTools/Ledger/blob/master/src/main/java/com/github/quiltservertools/ledger/api/LedgerApi.java).
+With Java, you can access our database with the API which can be obtained with `ViaLogium.getApi()`.
+You can see the API [here](https://github.com/QuiltServerTools/ViaLogium/blob/master/src/main/java/com/github/quiltservertools/vialogium/api/LedgerApi.java).
 
 ```java
 public class LedgerExamples {
@@ -60,7 +60,7 @@ public class LedgerExamples {
         worlds.add(Negatable.allow(world.getRegistryKey().getValue()));
         params.setWorlds(worlds);
         // Run search
-        CompletableFuture<SearchResults> future = Ledger.getApi().searchActions(params.build(), 0);
+        CompletableFuture<SearchResults> future = ViaLogium.getApi().searchActions(params.build(), 0);
         // Blocks thread for result
         SearchResults results = future.get();
     }
@@ -74,7 +74,7 @@ public class LedgerExamples {
         // Create action
         ActionType action = ActionFactory.INSTANCE.blockPlaceAction(world, pos, state, player, entity);
         // Log the action
-        Ledger.getApi().logAction(action);
+        ViaLogium.getApi().logAction(action);
     }
 }
 ```

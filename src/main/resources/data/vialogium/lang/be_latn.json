@@ -1,0 +1,92 @@
+{
+    "text.vialogium.header.search.pos": "--- Pošuk žurnalaŭ na %s ---",
+    "text.vialogium.header.search": "------ Pošuk žurnalaŭ ------",
+    "text.vialogium.header.status": "------ viaLogium ------",
+
+    "text.vialogium.footer.search": "------- %s [Staronka %s z %s] %s -------",
+    "text.vialogium.footer.page_forward": ">>",
+    "text.vialogium.footer.page_forward.hover": "Nastupnaja staronka",
+    "text.vialogium.footer.page_backward": "<<",
+    "text.vialogium.footer.page_backward.hover": "Minulaja staronka",
+
+    "text.vialogium.status.queue": "Čerha bazy dadzienych: %s",
+    "text.vialogium.status.queue.busy": "Zaniata",
+    "text.vialogium.status.queue.empty": "Pusta",
+    "text.vialogium.status.version": "Viersija: %s",
+    "text.vialogium.status.discord": "Discord: %s",
+    "text.vialogium.status.discord.join": "Nacisnicie, kab dalučycca",
+    "text.vialogium.status.db_type": "Typ bazy dadzienych: %s",
+    "text.vialogium.status.wiki": "Kiraŭnictva: %s",
+    "text.vialogium.status.wiki.view": "Nacisnicie dlia prahliadu",
+
+    "text.vialogium.preview.start": "Pačatak papiaredniaha prahliadu",
+
+    "text.vialogium.action_message": "%1$s %2$s %3$s %4$s %5$s",
+    "text.vialogium.action_message.time_diff": "%s tamu",
+    "text.vialogium.action_message.location.hover": "Nacisnicie, kab teliepartavacca",
+    "text.vialogium.action_message.with": "z",
+
+    "text.vialogium.rollback.start": "Adkat %s dziejanniaŭ",
+    "text.vialogium.rollback.finish": "Adkat zavieršany",
+    "text.vialogium.rollback.fail": "Nie ŭdalosia adkacić %s x%s",
+
+    "text.vialogium.restore.start": "Adnaŭliennie %s dziejanniaŭ",
+    "text.vialogium.restore.finish": "Adnaŭliennie zavieršana",
+    "text.vialogium.restore.fail": "Nie ŭdalosia adnavić %s x%s",
+
+    "text.vialogium.inspect.toggle": "Režym ahliadu: %s",
+    "text.vialogium.inspect.on": "Ukliučany",
+    "text.vialogium.inspect.off": "Vykliučany",
+
+    "text.vialogium.database.busy": "Bazy dadzienych zaraz zaniata. Heta moža zaniać niekatory čas",
+
+    "error.vialogium.no_cached_params": "Niama kešavanaha pošuku. Pasprabujcie spačatku pašukać",
+    "error.vialogium.command.no_results": "Niama rezuĺtataŭ dlia hetaha pošuku",
+    "error.vialogium.no_more_pages": "Boĺš niama staronak",
+    "error.vialogium.unknown_param": "Nieviadomy paramietr %s",
+    "error.vialogium.no_preview": "Niama ciakučaha papiaredniaha prahliadu",
+    "error.vialogium.unspecific.range": "Kali laska, ukažycie dyjapazon.",
+    "error.vialogium.unspecific.range_to_big": "Maksimaĺny dyjapazon skladaje %s.",
+    "error.vialogium.unspecific.source_or_time": "Kali laska, ukažycie krynicu abo čas (paslia).",
+
+    "text.vialogium.action.block-place": "pastaviŭ",
+    "text.vialogium.action.block-break": "zlamaŭ",
+    "text.vialogium.action.block-change": "zmianiŭ",
+    "text.vialogium.action.item-insert": "paklaŭ",
+    "text.vialogium.action.item-remove": "uziaŭ",
+    "text.vialogium.action.item-pick-up": "padabraŭ",
+    "text.vialogium.action.item-drop": "skinuŭ",
+    "text.vialogium.action.entity-kill": "zabiŭ",
+    "text.vialogium.action.entity-change": "zmianiŭ",
+
+    "text.vialogium.parameter.action.description": "Fiĺtravać pa typu vykananaha dziejannia.",
+    "text.vialogium.parameter.after.description": "Fiĺtravać pa časie (paslia vyznačanaha času).",
+    "text.vialogium.parameter.before.description": "Fiĺtravać pa časie (da vyznačanaha času). Zvyčajna varta vykarystoŭvać paslia.",
+    "text.vialogium.parameter.object.description": "Fiĺtravać pa abjektach. Heta moža być blok, pradmiet abo sutnasć.",
+    "text.vialogium.parameter.range.description": "Fiĺtravać pa miescaznachodžannie (kvadratny radyus vakol vašaha miescaznachodžannia).",
+    "text.vialogium.parameter.rolledback.description": "Fiĺtravać pa adkačanym stanie.",
+    "text.vialogium.parameter.source.description": "Fiĺtravać pa krynicy (imia huĺca abo krynica z ’@’).",
+    "text.vialogium.parameter.world.description": "Fiĺtravać pa ŭkazanym sviecie.",
+
+    "text.vialogium.network.protocols_mismatched": "Niesumiaščaĺnasć viersii pratakola: viersija pratakola moda viaLogium %d, a viersija klijenta %d",
+    "text.vialogium.network.no_mod_info": "Niemahčyma vyznačyć infarmacyju pra mod dlia vašaha klijenta",
+
+    "text.vialogium.purge.starting": "------ Pačatak čystki ------",
+    "text.vialogium.purge.complete": "------ Čystka zavieršana ------",
+
+    "text.vialogium.player.result": "%1$s: Upieršyniu dalučyŭsia %2$s. Apošni raz dalučyŭsia: %3$s",
+    "error.vialogium.purge.no_pending": "No pending purge confirmation. Run purge command first.",
+    "error.vialogium.purge.invalid_key": "Invalid purge confirmation key.",
+    "error.vialogium.purge.expired": "Purge confirmation key expired. Run purge command again.",
+    "text.vialogium.action.entity-mount": "mounted",
+    "text.vialogium.action.entity-dismount": "dismounted",
+    "text.vialogium.action.frame-insert": "placed into item frame",
+    "text.vialogium.action.frame-remove": "removed from item frame",
+    "text.vialogium.action.player-kill": "player-killed",
+    "text.vialogium.action.player-join": "joined",
+    "text.vialogium.action.player-leave": "left",
+    "text.vialogium.action.villager-trade": "traded with",
+    "text.vialogium.action.totem-pop": "popped",
+    "text.vialogium.action.object.server": "the server",
+    "text.vialogium.purge.confirm_required": "Confirm purge with /vl purge --confirm %1$s (expires in %2$s seconds)"
+}

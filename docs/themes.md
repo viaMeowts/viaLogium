@@ -1,6 +1,6 @@
-### Ledger Chat Themes
+### ViaLogium Chat Themes
 
-This is a list of preset themes for your Ledger messages. Copy/paste the block into your `color` section to use
+This is a list of preset themes for your ViaLogium messages. Copy/paste the block into your `color` section to use
 
 #### Default blue
 

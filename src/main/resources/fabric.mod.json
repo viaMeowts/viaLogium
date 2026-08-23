@@ -3,33 +3,34 @@
     "id": "${id}",
     "version": "${version}",
     "name": "${name}",
-    "description": "Logs world events and allows for them to be rolled back",
+    "description": "viaLogium logs world events and allows rollbacks with database-backed history",
     "authors": [
-        "Potatoboy9999"
+        "viaMeowts"
     ],
     "contact": {
-        "homepage": "https://quiltservertools.github.io/Ledger/latest/",
-        "sources": "https://github.com/QuiltServerTools/Ledger",
-        "issues": "https://github.com/QuiltServerTools/Ledger/issues"
+        "homepage": "https://github.com/viaMeowts/viaLogium",
+        "sources": "https://github.com/viaMeowts/viaLogium",
+        "issues": "https://github.com/viaMeowts/viaLogium/issues"
     },
     "license": "LGPL",
-    "icon": "assets/ledger/icon.png",
+    "icon": "assets/vialogium/icon.png",
     "environment": "server",
     "entrypoints": {
         "server": [
             {
-                "value": "com.github.quiltservertools.ledger.Ledger::INSTANCE"
+                "value": "com.viameowts.vialogium.ViaLogium::INSTANCE"
             }
         ]
     },
     "mixins": [
-        "ledger.mixins.json"
+        "vialogium.mixins.json"
     ],
     "depends": {
         "fabricloader": ">=0.16.2",
         "fabric": ">=0.133.13+1.21.9",
         "fabric-language-kotlin": ">=${fabricKotlin}",
-        "minecraft": ">=1.21.11"
+        "minecraft": ">=1.21.11",
+        "viapanel": "*"
     },
     "breaks": {
         "cardboard": "*"

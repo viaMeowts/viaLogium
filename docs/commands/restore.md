@@ -1,11 +1,11 @@
 # Restore
-`/ledger restore`  
+`/vialogium restore`  
 Alias: None  
-Permission: `ledger.commands.rollback`
+Permission: `vialogium.commands.rollback`
 
 ---
 
-### `/ledger restore <params>`
+### `/vialogium restore <params>`
 This command will find **all** actions that match the [parameters](../parameters.md) that ***have*** already been rolled back.
 It will then undo all possible selected actions. 
 Basically, it undoes [rollbacks](../commands/rollback.md).

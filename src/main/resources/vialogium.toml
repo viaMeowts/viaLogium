@@ -1,0 +1,106 @@
+[database]
+# The maximum amount of time to wait for the queue to drain when the server stops
+queueTimeoutMin = 5
+# The amount of time between checking if the queue is empty when the server stops
+queueCheckDelaySec = 10
+# Automatically purge entries older than the number of days specified. Set to -1 to disable
+autoPurgeDays = -1
+# The maximum amount of actions to commit in a single batch
+batchSize = 1000
+# The amount of time to wait between batches in ticks (20 ticks = 1 second)
+batchDelay = 10
+# Hard safety cap for in-memory queue. New actions are dropped above this limit to keep server alive.
+maxQueueSize = 750000
+# Queue threshold to enable critical mode (faster draining + optional dropping of non-essential actions)
+criticalQueueSize = 150000
+# Queue threshold to enable emergency mode (aggressive log reduction to protect TPS/server thread)
+emergencyQueueSize = 450000
+# Batch size while in critical mode
+criticalBatchSize = 10000
+# Delay between batches while in critical mode (ticks)
+criticalBatchDelay = 1
+# Batch size while in emergency mode
+emergencyBatchSize = 25000
+# Delay between batches while in emergency mode (ticks)
+emergencyBatchDelay = 0
+# Dynamically scales batch size/delay between normal and critical values based on queue pressure
+adaptiveQueueTuning = true
+# Drop non-essential actions in critical mode (player-attributed actions are always kept)
+dropNonEssentialInCritical = true
+# Sources always kept in critical mode
+criticalKeepSources = ["player", "command", "hopper", "hopper_minecart", "copper_golem"]
+# Keep every N-th explosion block action in critical mode (1 = keep all)
+criticalExplosionKeepEvery = 20
+# Keep every N-th explosion block action in emergency mode (1 = keep all)
+emergencyExplosionKeepEvery = 100
+# In emergency mode, drop non-player non-command block actions entirely
+emergencyDropNonPlayerBlockActions = true
+# SQLite tuning
+sqliteUseWal = true
+sqliteSynchronousNormal = true
+sqliteTempStoreMemory = true
+sqliteCacheSizeKb = 32000
+sqliteMmapSizeMb = 256
+sqliteBusyTimeoutMs = 5000
+# The location of the database file. Defaults to the world folder if not specified
+#location = "./custom-dir"
+
+[database_extensions]
+# Database backend to use: SQLITE, MYSQL, MARIADB, POSTGRESQL, H2
+database = "SQLITE"
+url = "localhost"
+username = "root"
+password = ""
+properties = {}
+maxPoolSize = 10
+connectionTimeout = 60000
+maxLifetime = 1800000
+
+[search]
+# Number of actions to show per page
+pageSize = 8
+# Permission level for purge command
+purgePermissionLevel = 4
+# Time zone to display timestamps in (UTC, UTC+1, America/Los_Angeles)
+timeZone = "UTC"
+# Maximum range allowed in rollback / restore commands
+maxRange = 100
+# Radius in blocks for /vl near
+nearRadius = 10
+
+[color]
+# Colors in hex format
+primary = "#FFC64C"
+primaryVariant = "#FCDE9D"
+secondary = "#D9D0D5"
+secondaryVariant = "#FCDE9D"
+light = "#D9D0D5"
+actionPositive = "#98FB98"
+actionNegative = "#FF5555"
+
+[actions]
+# Blacklists - blacklisted things will not be logged in the database
+# Example - Prevent all actions with stone or bat as the object from being logged
+# objectBlacklist = [
+#   "minecraft:stone",
+#   "minecraft:bat"
+# ]
+
+# Blacklists action types. Ex: "block-break", "entity-kill"
+typeBlacklist = []
+# Blacklists worlds/dimensions. Ex: "mincraft:the_end", "minecraft:overworld"
+worldBlacklist = []
+# Blacklists objects (Items, Mobs, Blocks). Ex: "minecraft:cobblestone", "minecraft:blaze"
+objectBlacklist = []
+# Blacklists sources. Ex: "lava", "gravity", "fire", "fall"
+sourceBlacklist = []
+# Log piston block movements (source "piston"). Off by default: redstone clocks
+# can be spammy. Self-throttles: dropped first when the queue hits critical/emergency.
+logPistons = false
+
+[networking]
+# This section relates to viaLogium's ability to interact with client mods for ease of use
+# Networking is enabled by default but you can disable and control it here
+
+# Change to true to allow viaLogium client mod packets
+networking = true

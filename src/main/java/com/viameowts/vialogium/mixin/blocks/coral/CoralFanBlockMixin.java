@@ -1,0 +1,22 @@
+package com.viameowts.vialogium.mixin.blocks.coral;
+
+import com.viameowts.vialogium.callbacks.BlockChangeCallback;
+import com.viameowts.vialogium.utility.Sources;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.CoralFanBlock;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArgs;
+import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
+
+@Mixin(CoralFanBlock.class)
+public abstract class CoralFanBlockMixin {
+    @ModifyArgs(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
+    public void logCoralDeath(Args args, BlockState oldState, ServerLevel world, BlockPos pos, RandomSource random) {
+        BlockState newState = args.get(1);
+        BlockChangeCallback.EVENT.invoker().changeBlock(world, pos, oldState, newState, null, null, Sources.DECAY);
+    }
+}

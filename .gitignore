@@ -15,4 +15,4 @@ run/
 minecraft/
 
 # Mkdocs
-site/
+site/bin/

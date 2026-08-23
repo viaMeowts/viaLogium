@@ -1,6 +1,6 @@
 {
   "required": true,
-  "package": "com.github.quiltservertools.ledger.testmod.mixin",
+  "package": "com.viameowts.vialogium.testmod.mixin",
   "compatibilityLevel": "JAVA_16",
   "client": [
     "ClientPlayerInteractionManagerMixin"

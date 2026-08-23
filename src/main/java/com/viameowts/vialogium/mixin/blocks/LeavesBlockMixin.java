@@ -1,0 +1,21 @@
+package com.viameowts.vialogium.mixin.blocks;
+
+import com.viameowts.vialogium.callbacks.BlockBreakCallback;
+import com.viameowts.vialogium.utility.Sources;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Mixin(LeavesBlock.class)
+public abstract class LeavesBlockMixin {
+    @Inject(method = "randomTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;removeBlock(Lnet/minecraft/core/BlockPos;Z)Z"))
+    public void logLeafDecay(BlockState state, ServerLevel world, BlockPos pos, RandomSource random, CallbackInfo ci) {
+        BlockBreakCallback.EVENT.invoker().breakBlock(world, pos, state, state.hasBlockEntity() ? world.getBlockEntity(pos) : null, Sources.DECAY);
+    }
+}

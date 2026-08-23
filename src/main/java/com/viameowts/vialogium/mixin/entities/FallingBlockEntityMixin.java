@@ -1,0 +1,42 @@
+package com.viameowts.vialogium.mixin.entities;
+
+import com.viameowts.vialogium.callbacks.BlockBreakCallback;
+import com.viameowts.vialogium.callbacks.BlockPlaceCallback;
+import com.viameowts.vialogium.utility.Sources;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.entity.item.FallingBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArgs;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
+
+@Mixin(FallingBlockEntity.class)
+public abstract class FallingBlockEntityMixin {
+    @Shadow
+    private BlockState blockState;
+
+    @Inject(
+            method = "fall",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
+    private static void vialogiumBlockFallInvoker(Level world, BlockPos pos, BlockState state, CallbackInfoReturnable<FallingBlockEntity> cir) {
+        BlockBreakCallback.EVENT.invoker().breakBlock(world, pos, state, state.hasBlockEntity() ? world.getBlockEntity(pos) : null, Sources.GRAVITY);
+    }
+
+    @ModifyArgs(
+            method = "tick",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
+    private void vialogiumBlockLandInvoker(Args args) {
+        FallingBlockEntity entity = (FallingBlockEntity) (Object) this;
+        BlockPos pos = args.get(0);
+        BlockPlaceCallback.EVENT.invoker().place(entity.level(), pos, this.blockState, null, Sources.GRAVITY);
+    }
+}

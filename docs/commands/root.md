@@ -1,8 +1,8 @@
 # Root
-`/ledger`  
+`/vialogium`  
 Alias: `lg`  
-Permission: `ledger.commands.root`
+Permission: `vialogium.commands.root`
 
 ---
 
-This is the central command to ledger that grants access to all other commands.
+This is the central command to vialogium that grants access to all other commands.

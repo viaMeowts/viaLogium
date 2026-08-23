@@ -1,0 +1,92 @@
+{
+    "text.vialogium.header.search.pos": "--- Пошук журналів на %s ---",
+    "text.vialogium.header.search": "------ Пошук журналів ------",
+    "text.vialogium.header.status": "------ viaLogium ------",
+
+    "text.vialogium.footer.search": "------- %s [Сторінка %s з %s] %s -------",
+    "text.vialogium.footer.page_forward": ">>",
+    "text.vialogium.footer.page_forward.hover": "Наступна сторінка",
+    "text.vialogium.footer.page_backward": "<<",
+    "text.vialogium.footer.page_backward.hover": "Минула сторінка",
+
+    "text.vialogium.status.queue": "Черга бази даних: %s",
+    "text.vialogium.status.queue.busy": "Зайнято",
+    "text.vialogium.status.queue.empty": "Порожньо",
+    "text.vialogium.status.version": "Версія: %s",
+    "text.vialogium.status.discord": "Discord: %s",
+    "text.vialogium.status.discord.join": "Натисніть, щоб приєднатися",
+    "text.vialogium.status.db_type": "Тип бази даних: %s",
+    "text.vialogium.status.wiki": "Керівництво: %s",
+    "text.vialogium.status.wiki.view": "Натисніть, щоб переглянути",
+
+    "text.vialogium.preview.start": "Початок попереднього перегляду",
+
+    "text.vialogium.action_message": "%1$s %2$s %3$s %4$s %5$s",
+    "text.vialogium.action_message.time_diff": "%s тому",
+    "text.vialogium.action_message.location.hover": "Натисніть, щоб телепортуватися",
+    "text.vialogium.action_message.with": "з",
+
+    "text.vialogium.rollback.start": "Відкат %s дій",
+    "text.vialogium.rollback.finish": "Відкат завершено",
+    "text.vialogium.rollback.fail": "Не вдалося відкотити %s x%s",
+
+    "text.vialogium.restore.start": "Відновлення %s дій",
+    "text.vialogium.restore.finish": "Відновлення завершено",
+    "text.vialogium.restore.fail": "Не вдалося відновити %s x%s",
+
+    "text.vialogium.inspect.toggle": "Режим огляду: %s",
+    "text.vialogium.inspect.on": "Увімкнено",
+    "text.vialogium.inspect.off": "Вимкнено",
+
+    "text.vialogium.database.busy": "База даних зараз зайнята. Це може зайняти деякий час",
+
+    "error.vialogium.no_cached_params": "Немає кешованого пошуку. Спробуйте спочатку виконати пошук",
+    "error.vialogium.command.no_results": "Немає результатів для цього пошуку",
+    "error.vialogium.no_more_pages": "Більше немає сторінок",
+    "error.vialogium.unknown_param": "Невідомий параметр %s",
+    "error.vialogium.no_preview": "Немає поточного попереднього перегляду",
+    "error.vialogium.unspecific.range": "Будь ласка, вкажіть діапазон.",
+    "error.vialogium.unspecific.range_to_big": "Максимальний діапазон становить %s.",
+    "error.vialogium.unspecific.source_or_time": "Будь ласка, вкажіть джерело або час (після).",
+
+    "text.vialogium.action.block-place": "розмістив",
+    "text.vialogium.action.block-break": "зламав",
+    "text.vialogium.action.block-change": "змінив",
+    "text.vialogium.action.item-insert": "поклав",
+    "text.vialogium.action.item-remove": "взяв",
+    "text.vialogium.action.item-pick-up": "підібрав",
+    "text.vialogium.action.item-drop": "скинув",
+    "text.vialogium.action.entity-kill": "вбив",
+    "text.vialogium.action.entity-change": "змінив",
+
+    "text.vialogium.parameter.action.description": "Фільтрувати за типом виконаної дії.",
+    "text.vialogium.parameter.after.description": "Фільтрувати за часом (після вказаного часу).",
+    "text.vialogium.parameter.before.description": "Фільтрувати за часом (до вказаного часу). Зазвичай слід використовувати після.",
+    "text.vialogium.parameter.object.description": "Фільтрувати за об'єктом. Це може бути блок, предмет або сутність.",
+    "text.vialogium.parameter.range.description": "Фільтрувати за локацією (квадратний радіус навколо вашого місця розташування).",
+    "text.vialogium.parameter.rolledback.description": "Фільтрувати за відкоченим станом.",
+    "text.vialogium.parameter.source.description": "Фільтрувати за джерелом (ім'я гравця або джерело з '@').",
+    "text.vialogium.parameter.world.description": "Фільтрувати за вказаним виміром.",
+
+    "text.vialogium.network.protocols_mismatched": "Несумісність версій протоколу: версія протоколу моду viaLogium %d, а версія клієнта %d",
+    "text.vialogium.network.no_mod_info": "Неможливо визначити інформацію про мод для вашого клієнтського моду",
+
+    "text.vialogium.purge.starting": "------ Початок очищення ------",
+    "text.vialogium.purge.complete": "------ Очищення завершено ------",
+
+    "text.vialogium.player.result": "%1$s: Вперше приєднався %2$s. Востаннє приєднався: %3$s",
+    "error.vialogium.purge.no_pending": "No pending purge confirmation. Run purge command first.",
+    "error.vialogium.purge.invalid_key": "Invalid purge confirmation key.",
+    "error.vialogium.purge.expired": "Purge confirmation key expired. Run purge command again.",
+    "text.vialogium.action.entity-mount": "mounted",
+    "text.vialogium.action.entity-dismount": "dismounted",
+    "text.vialogium.action.frame-insert": "placed into item frame",
+    "text.vialogium.action.frame-remove": "removed from item frame",
+    "text.vialogium.action.player-kill": "player-killed",
+    "text.vialogium.action.player-join": "joined",
+    "text.vialogium.action.player-leave": "left",
+    "text.vialogium.action.villager-trade": "traded with",
+    "text.vialogium.action.totem-pop": "popped",
+    "text.vialogium.action.object.server": "the server",
+    "text.vialogium.purge.confirm_required": "Confirm purge with /vl purge --confirm %1$s (expires in %2$s seconds)"
+}

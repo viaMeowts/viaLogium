@@ -32,7 +32,7 @@ Multiple Allowed - `Yes`
 Example - `object:minecraft:stone`
 
 This parameter allows you to filter your selection based on the object.
-An object is ledger's name for an identifier that could be a block, item or entity.
+An object is vialogium's name for an identifier that could be a block, item or entity.
 An identifier is Minecraft's ID system of a namespace and a path divided by `:`.
 
 ## Range

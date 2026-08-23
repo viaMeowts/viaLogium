@@ -1,0 +1,12 @@
+package com.viameowts.vialogium.config
+
+import com.uchuhimo.konf.ConfigSpec
+import java.time.ZoneId
+
+object SearchSpec : ConfigSpec() {
+    val pageSize by required<Int>()
+    val purgePermissionLevel by required<Int>()
+    val timeZone by required<ZoneId>()
+    val maxRange by required<Int>()
+    val nearRadius by required<Int>()
+}

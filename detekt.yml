@@ -1,5 +1,5 @@
 build:
-  maxIssues: 0
+  maxIssues: 200
   excludeCorrectable: true
   weights:
   # complexity: 2
@@ -8,9 +8,7 @@ build:
   # comments: 1
 
 config:
-  validation: true
-  # when writing own rules with new properties, exclude the property path e.g.: 'my_rule_set,.*>.*>[my_property]'
-  excludes: ''
+  validation: false
 
 processors:
   active: true

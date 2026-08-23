@@ -1,6 +1,6 @@
 # Configuration
 
-Ledger's configuration file is found in `config/ledger.toml`.
+ViaLogium's configuration file is found in `config/vialogium.toml`.
 It is written in [TOML](https://toml.io/en/) and can be edited in any text editor.
 Any changes you make to the config will be automatically updated without needing to reload or restart the server.
 When checking for the config for a value, it first checks the system properties,
@@ -46,8 +46,8 @@ This uses the Java TimeZone format. You can provide offsets ("UTC", "UTC+3"), bu
 
 Found under `[color]`
 
-Ledger allows for the customisation of the colors used in the messages sent in game. 
-By default, Ledger uses the blue theme. More themes can be found in the [themes](themes.md) file
+ViaLogium allows for the customisation of the colors used in the messages sent in game. 
+By default, ViaLogium uses the blue theme. More themes can be found in the [themes](themes.md) file
 
 ### Filters
 
@@ -111,9 +111,9 @@ objectBlacklist = []
 sourceBlacklist = []
 
 [networking]
-# This section relates to Ledger's ability to interact with client mods for ease of use
+# This section relates to ViaLogium's ability to interact with client mods for ease of use
 # Networking is enabled by default but you can disable it here
 
-# Change to true to allow Ledger client mod packets
+# Change to true to allow ViaLogium client mod packets
 networking = true
 ```

@@ -1,17 +1,17 @@
 # Networking
 
-Ledger supports numerous custom packets for interacting with supported client mods
+ViaLogium supports numerous custom packets for interacting with supported client mods
 
 ## Versions
 
-The information on this page is applicable for Ledger Networking version 3, which is the version in Ledger versions `1.3.0` and later
+The information on this page is applicable for ViaLogium Networking version 3, which is the version in ViaLogium versions `1.3.0` and later
 
 ## Packet Types
 
-The server will not respond to packets unless the player has the correct permissions, which is `ledger.networking` and the relevant command permission
+The server will not respond to packets unless the player has the correct permissions, which is `vialogium.networking` and the relevant command permission
 
 #### Notation
-Types shown here are the Java variable types. They have the equivalent value (if applicable) in Kotlin when used in Ledger's internal code
+Types shown here are the Java variable types. They have the equivalent value (if applicable) in Kotlin when used in ViaLogium's internal code
 
 ---
 ## Client to Server
@@ -24,7 +24,7 @@ Once one of the c2s packets have been received, the server will send a response 
 
 Inspects a block at a given position, using the player's current dimension. This may be changed in the future
 
-Channel: `ledger:inspect`
+Channel: `vialogium:inspect`
 
 Buf content:
 
@@ -32,11 +32,11 @@ Position: `BlockPos`
 
 Number of pages: `int`
 
-Return packet type: `ledger.action`
+Return packet type: `vialogium.action`
 
 ### Search Packet
 
-Channel: `ledger:search`
+Channel: `vialogium:search`
 
 Buf content:
 
@@ -46,11 +46,11 @@ Pages: `int`
 
 String formatted in the same way as a `/lg search` command would be formatted
 
-Return packet type: `ledger.action`
+Return packet type: `vialogium.action`
 
 ### Handshake Packet
 
-Channel: `ledger:handshake`
+Channel: `vialogium:handshake`
 
 Buf content:
 
@@ -62,11 +62,11 @@ Mod NBT should contain the following:
 
 - Mod ID (`modid`) [`String`] : Mod identifier of the mod
 
-- Protocol version (`protocol_version`) [`int`] : Ledger protocol version
+- Protocol version (`protocol_version`) [`int`] : ViaLogium protocol version
 
 ### Purge Packet
 
-Channel: `ledger.purge`
+Channel: `vialogium.purge`
 
 Buf content:
 
@@ -74,7 +74,7 @@ Params: `String` - same string as used in the search command
 
 ### Rollback Packet
 
-Channel: `ledger.rollback`
+Channel: `vialogium.rollback`
 
 Buf content:
 
@@ -90,7 +90,7 @@ Params: `String` - same string as used in the search command
 
 Represents a logged action from the database
 
-Channel: `ledger:action`
+Channel: `vialogium:action`
 
 Buf content:
 
@@ -114,21 +114,21 @@ Additional NBT: `String`
 
 ### Handshake Packet
 
-Sends information about Ledger to compatible clients
+Sends information about ViaLogium to compatible clients
 
-Channel: `ledger:handshake`
+Channel: `vialogium:handshake`
 
 Buf content:
 
-Protocol Version: `int` - Version of Ledger networking protocol. Ledger `1.1.0` and later uses version `1`
+Protocol Version: `int` - Version of ViaLogium networking protocol. ViaLogium `1.1.0` and later uses version `1`
 
 Mod allowed: `boolean`
 
 ## Response
 
-Registers the server receiving a Ledger packet and contains information about what the server is doing
+Registers the server receiving a ViaLogium packet and contains information about what the server is doing
 
-Channel: `ledger.response`
+Channel: `vialogium.response`
 
 ### Packet structure
 

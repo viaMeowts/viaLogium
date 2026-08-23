@@ -1,11 +1,11 @@
 # Search
-`/ledger search`  
+`/vialogium search`  
 Alias: `s`  
-Permission: `ledger.commands.search`
+Permission: `vialogium.commands.search`
 
 ---
 
-### `/ledger search <params>`
+### `/vialogium search <params>`
 Often, inspecting just one position is not what you want.
 The search command allows you to preform advanced queries on the database.
 To refine your search, use search [parameters](../parameters.md).

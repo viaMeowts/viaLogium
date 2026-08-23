@@ -1,16 +1,16 @@
 # Player
-`/ledger player`  
-Permission: `ledger.commands.player`  
+`/vialogium player`  
+Permission: `vialogium.commands.player`  
 Alias: `pl`
 
 ---
 
-### `/ledger player <profiles>`
+### `/vialogium player <profiles>`
 This command searches for the name, first and last join of a player
 
 #### Example syntax for players
 
-`/ledger player Potatoboy9999`
+`/vialogium player Potatoboy9999`
 
 ### Results
 

@@ -1,6 +1,6 @@
 # Developing Extensions
 
-Extensions provide an easy way to add your own functionality to Ledger
+Extensions provide an easy way to add your own functionality to ViaLogium
 
 ### Note
 
@@ -9,11 +9,11 @@ The docs shown here have Kotlin code, but you can write your extension in Java s
 ## Set up project
 
 1. Set up your mod environment as usual
-2. Publish Ledger to `mavenLocal`
+2. Publish ViaLogium to `mavenLocal`
 3. Add the following to your `build.gradle`:
 
 ```groovy
-modImplementation(include("com.github.quiltservertools:ledger:LATEST_LEDGER_VERSION"))
+modImplementation(include("com.github.quiltservertools:vialogium:LATEST_LEDGER_VERSION"))
 ```
 
 ## Creating your extension
@@ -35,7 +35,7 @@ object Extension : DatabaseExtension {
 
 We now need to fill out the methods.
 
-`getDatabase`: Returns an Exposed `Database` object. This is how you add new database types to Ledger
+`getDatabase`: Returns an Exposed `Database` object. This is how you add new database types to ViaLogium
 
 `getIdentifier`: Should return a new `Identifier(YOUR_MODID, DATABASE_TYPE)` object.
 
@@ -83,7 +83,7 @@ object Extension : CommandExtension {
 
 ## Config specs
 
-Ledger uses the Konf library for configuration. You can add your own config specs to Ledger's file if your extension needs it
+ViaLogium uses the Konf library for configuration. You can add your own config specs to ViaLogium's file if your extension needs it
 
 Create a config spec:
 

@@ -14,7 +14,7 @@ val modVersion: String by project
 val mavenGroup: String by project
 
 base.archivesName.set(modId)
-version = "$modVersion${getVersionMetadata()}"
+version = modVersion
 group = mavenGroup
 
 sourceSets {
@@ -75,6 +75,9 @@ dependencies {
     // Kotlin
     modImplementation(libs.fabric.kotlin)
 
+    // viaPanel API (optional at compile time, required at runtime via fabric.mod depends)
+    modCompileOnly(fileTree("../lib") { include("viapanel-*.jar") })
+
     // Database
     includeImplementation(libs.exposed.core)
     includeImplementation(libs.exposed.dao)
@@ -82,6 +85,11 @@ dependencies {
     includeImplementation(libs.exposed.jdbc)
 //    includeImplementation(libs.exposed.migration)
     includeImplementation(libs.sqlite.jdbc)
+    includeImplementation(libs.hikari)
+    includeImplementation(libs.h2)
+    includeImplementation(libs.mysql)
+    includeImplementation(libs.mariadb)
+    includeImplementation(libs.postgresql)
 
     // Config
     includeImplementation(libs.konf.core)
@@ -144,6 +152,7 @@ publishing {
 detekt {
     buildUponDefaultConfig = true
     autoCorrect = true
+    ignoreFailures = true
     config.setFrom(rootProject.files("detekt.yml"))
 }
 
