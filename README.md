@@ -4,17 +4,33 @@ viaLogium is a server-side world change logger for Fabric with search, inspect, 
 
 ## Based on Ledger
 
-viaLogium started as a fork of [Ledger](https://github.com/QuiltServerTools/Ledger) 1.3.18 by QuiltServerTools — the core logging engine, action/callback system and database layer are built on that codebase. License is carried over unchanged ([LGPL-3.0](./LICENSE.md)).
+viaLogium started as a deep fork of [Ledger](https://github.com/QuiltServerTools/Ledger) 1.3.18 by QuiltServerTools - the original logging engine, callback/mixin architecture and command framework are built on that codebase. License is carried over unchanged ([LGPL-3.0](./LICENSE.md)). Upstream history is preserved in this repository's git log below the fork baseline commit.
 
-Divergences from upstream:
+The divergence is substantial: at the 0.3.0 baseline the tree differed from upstream by **351 files (+195k lines)** - 189 files moved in the rebrand, 86 new modules, plus this fork's own fixes and features since.
 
-- Rebranded (`vialogium` / `/vl`), package namespace `com.viameowts.vialogium`
-- viaPanel integration for in-game config editing
-- Hardened DB flush (survives transient database failures), queue health reporting in `/vl status`
-- Opt-in piston movement logging
-- Russian documentation and Discord guides
+### What viaLogium changes and adds
 
-Upstream history is preserved in this repository's git log below the fork baseline commit.
+**Identity**
+- Full rebrand: mod id `vialogium`, namespace `com.viameowts.vialogium`, `/vl` command root, own icon and branding
+
+**Database pipeline (rewritten)**
+- `ActionQueueService` with NORMAL / CRITICAL / EMERGENCY queue-pressure modes, adaptive batch size/delay tuning and explicit per-category drop policies (upstream has none of this)
+- Resilient flush: transient DB failures no longer kill logging silently - failed batches retry with a bounded budget, `/vl status` shows live `Logging: OK / DEGRADED` health
+- Save-off (`/save-off`) write pauses are logged instead of being invisible
+- Rollback execution guard preventing feedback loops during restore operations
+
+**Logging coverage**
+- Action types grown from 14 to 21: totem pops, villager trades, entity mount/dismount, player join/leave, improved item pick-up/drop paths
+- Mixin set extended for current vanilla content (copper golem, shelves, decorated pots, minecart hopper transfers, silverfish infestation, ...) and opt-in piston movement logging (`[actions] logPistons`)
+
+**Platform integration**
+- [viaPanel](https://github.com/viaMeowts/viapanel) integration: full in-game config UI (bilingual provider), no manual TOML editing required
+- Client-mod networking layer for search/inspect UX
+- Public extension API for third-party database providers and actions
+
+**Documentation & localization**
+- Rewritten MkDocs documentation, Russian Discord user guides
+- 11 language files including Belarusian (Latin and Cyrillic)
 
 ## Install
 
