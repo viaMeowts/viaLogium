@@ -2,10 +2,24 @@
 
 viaLogium is a server-side world change logger for Fabric with search, inspect, rollback/restore, preview, and persistent database history.
 
+## Based on Ledger
+
+viaLogium started as a fork of [Ledger](https://github.com/QuiltServerTools/Ledger) 1.3.18 by QuiltServerTools — the core logging engine, action/callback system and database layer are built on that codebase. License is carried over unchanged ([LGPL-3.0](./LICENSE.md)).
+
+Divergences from upstream:
+
+- Rebranded (`vialogium` / `/vl`), package namespace `com.viameowts.vialogium`
+- viaPanel integration for in-game config editing
+- Hardened DB flush (survives transient database failures), queue health reporting in `/vl status`
+- Opt-in piston movement logging
+- Russian documentation and Discord guides
+
+Upstream history is preserved in this repository's git log below the fork baseline commit.
+
 ## Install
 
 - Put viaLogium in your `mods` folder together with Fabric API and `fabric-language-kotlin`.
-- For panel config editing, put `viapanel-2.7.0+mc1.21.11.jar` in the same `mods` folder.
+- For panel config editing, put a `viapanel-*.jar` build in the same `mods` folder.
 - On first run, config is generated at `config/vialogium.toml`.
 
 ## Database backends
