@@ -9,18 +9,24 @@ import com.viameowts.vialogium.network.Networking.hasNetworking
 import com.viameowts.vialogium.network.packet.action.ActionS2CPacket
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
 import net.minecraft.commands.CommandSourceStack
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
+import net.minecraft.resources.Identifier
 import java.time.Duration
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.*
 import kotlin.time.ExperimentalTime
 import kotlin.time.toKotlinDuration
 
 object MessageUtils {
+    val pageChangeAction: Identifier = ViaLogium.identifier("page-change")
+    val teleportAction: Identifier = ViaLogium.identifier("teleport")
+
     @OptIn(ExperimentalTime::class)
     suspend fun sendSearchResults(source: CommandSourceStack, results: SearchResults, header: Component) {
         // If the player has a ViaLogium compatible client, we send results as action packets rather than as chat messages
@@ -54,12 +60,14 @@ object MessageUtils {
                     "text.vialogium.footer.page_backward",
                 ).setStyle(TextColorPallet.primaryVariant).withStyle {
                     if (results.page > 1) {
+                        val tag = CompoundTag()
+                        tag.putInt("page", results.page - 1)
                         it.withHoverEvent(
                             HoverEvent.ShowText(
                                 Component.translatable("text.vialogium.footer.page_backward.hover"),
                             ),
                         ).withClickEvent(
-                            ClickEvent.RunCommand("/vl page ${results.page - 1}"),
+                            ClickEvent.Custom(pageChangeAction, Optional.of(tag)),
                         )
                     } else {
                         Style.EMPTY
@@ -71,12 +79,14 @@ object MessageUtils {
                     "text.vialogium.footer.page_forward",
                 ).setStyle(TextColorPallet.primaryVariant).withStyle {
                     if (results.page < results.pages) {
+                        val tag = CompoundTag()
+                        tag.putInt("page", results.page + 1)
                         it.withHoverEvent(
                             HoverEvent.ShowText(
                                 Component.translatable("text.vialogium.footer.page_forward.hover"),
                             ),
                         ).withClickEvent(
-                            ClickEvent.RunCommand("/vl page ${results.page + 1}"),
+                            ClickEvent.Custom(pageChangeAction, Optional.of(tag)),
                         )
                     } else {
                         Style.EMPTY

@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased] - 0.4.0 (upstream sync)
+
+Ported from upstream Ledger (commits between fork point 1.3.18 and 1.3.23):
+
+### Fixed
+- MySQL: action rows whose `extra_data` exceeds the TEXT column limit are skipped with a warn instead of failing the whole batch (#371).
+- Search result click actions now execute on the server thread - custom `vIALOGIum:page-change` / `teleport` click events are dispatched through a `ServerCommonPacketListenerImpl` mixin injected after `ensureRunningOnSameThread` (#372, #361).
+- Teleport click action guards against a null server level before warping.
+
+### Added
+- Declarative `actions(time)` index plus xyz index for fresh schemas on all backends; raw-exec migrations now gated behind new `[database] updateSchema = false` option (#369, #375).
+- Player names resolved from the local database cache (bimap keyed by DB player id) instead of hitting the Mojang cache per query (#357).
+- Item insert/remove tracking for Chiseled Bookshelf (`blocks.ChiseledBookShelfBlockMixin`) (#368).
+
+### Skipped (already covered better in this fork)
+- Upstream #355 (@global range NPE): our SearchParamArgument handles global ranges via explicit GLOBAL bounds - NPE unreachable.
+
 ## [Unreleased] - 0.3.0
 
 ### Added

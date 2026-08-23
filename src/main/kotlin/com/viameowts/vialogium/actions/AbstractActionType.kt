@@ -22,6 +22,7 @@ import net.minecraft.server.players.NameAndId
 import net.minecraft.util.Util
 import net.minecraft.world.level.Level
 import java.time.Instant
+import java.util.*
 import kotlin.time.ExperimentalTime
 
 abstract class AbstractActionType : ActionType {
@@ -173,15 +174,18 @@ abstract class AbstractActionType : ActionType {
     open fun getLocationMessage(): Component = "${pos.x} ${pos.y} ${pos.z}".literal()
         .setStyle(TextColorPallet.secondary)
         .withStyle {
+            val tag = CompoundTag()
+            tag.putInt("x", pos.x)
+            tag.putInt("y", pos.y)
+            tag.putInt("z", pos.z)
+            tag.putString("world", (world ?: Level.OVERWORLD.identifier()).toString())
             it.withHoverEvent(
                 HoverEvent.ShowText(
                     Component.literal(world?.let { "$it\n" } ?: "")
                         .append(Component.translatable("text.vialogium.action_message.location.hover")),
                 ),
             ).withClickEvent(
-                ClickEvent.RunCommand(
-                    "/vl tp ${world ?: Level.OVERWORLD.identifier()} ${pos.x} ${pos.y} ${pos.z}",
-                ),
+                ClickEvent.Custom(MessageUtils.teleportAction, Optional.of(tag)),
             )
         }
 }

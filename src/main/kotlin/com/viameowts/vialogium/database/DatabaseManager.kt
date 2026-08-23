@@ -72,6 +72,7 @@ const val MIN_RETRY_DELAY = 200L
 // The old 300s cap could freeze the database thread for minutes on a single bad query.
 const val MAX_RETRY_DELAY = 3_000L
 private const val ACTION_UPDATE_CHUNK_SIZE = 900
+const val MAX_EXTRA_DATA_BYTES = 65_535
 
 object DatabaseManager {
 
@@ -169,12 +170,19 @@ object DatabaseManager {
             Tables.Sources,
             Tables.Worlds,
         )
-        exec("CREATE INDEX IF NOT EXISTS actions_rolled_back_idx ON actions (rolled_back)")
-        // Spatial + time indexes: without these, every location/time query (search, inspect, near,
-        // rollback, purge with a radius) is a full table scan, which becomes very slow as the table
-        // grows — slow enough to look like the database thread has frozen on large databases.
-        exec("CREATE INDEX IF NOT EXISTS actions_xyz_idx ON actions (x, y, z)")
-        exec("CREATE INDEX IF NOT EXISTS actions_time_idx ON actions (time)")
+        if (config[DatabaseSpec.updateSchema]) {
+            listOf(
+                "CREATE INDEX IF NOT EXISTS actions_rolled_back_idx ON actions (rolled_back)",
+                "CREATE INDEX IF NOT EXISTS actions_xyz_idx ON actions (x, y, z)",
+                "CREATE INDEX IF NOT EXISTS actions_time_idx ON actions (time)",
+            ).forEach { ddl ->
+                runCatching {
+                    exec(ddl)
+                }.onFailure {
+                    logWarn("Schema update skipped: $ddl failed: ${it.message}")
+                }
+            }
+        }
         logInfo("Tables created")
     }
 
@@ -194,6 +202,7 @@ object DatabaseManager {
             }
             Tables.Player.all().forEach {
                 cache.playerKeys.put(it.playerId, it.id.value)
+                cache.playernameKeys[it.playerName] = it.id.value
             }
         }
     }
@@ -374,6 +383,7 @@ object DatabaseManager {
         val objectIdentifierCache = DatabaseCacheService.objectIdentifierKeys.inverse()
         val sourceCache = DatabaseCacheService.sourceKeys.inverse()
         val playerCache = DatabaseCacheService.playerKeys.inverse()
+        val playerNameCache = DatabaseCacheService.playernameKeys.inverse()
 
         for (action in query) {
             val typeSupplier = ActionRegistry.getType(
@@ -395,7 +405,10 @@ object DatabaseManager {
             type.oldObjectState = action[Tables.Actions.oldBlockState]
             type.sourceName = sourceCache[action[Tables.Actions.sourceName].value]!!
             type.sourceProfile = action.getOrNull(Tables.Actions.sourcePlayer)?.let {
-                ViaLogium.server.services().nameToIdCache?.get(playerCache[it.value]!!)?.orElse(null)
+                val id = it.value
+                val uuid = playerCache[id]
+                val name = playerNameCache[id]
+                if (uuid != null && name != null) NameAndId(uuid, name) else null
             }
             type.extraData = action[Tables.Actions.extraData]
             type.rolledBack = action[Tables.Actions.rolledBack]
@@ -618,7 +631,19 @@ object DatabaseManager {
     }
 
     private fun Transaction.insertActions(actions: List<ActionType>) {
-        Tables.Actions.batchInsert(actions, shouldReturnGeneratedValues = false) { action ->
+        val (safe, oversized) = actions.partition {
+            it.extraData == null || it.extraData!!.length <= MAX_EXTRA_DATA_BYTES
+        }
+        oversized.forEach { action ->
+            logWarn(
+                "Skipping action log: extra_data too large (${action.extraData!!.length} chars) " +
+                    "for action ${action.identifier} at " +
+                    "[${action.world} ${action.pos.x} ${action.pos.y} ${action.pos.z}] " +
+                    "by ${action.sourceProfile?.name ?: action.sourceName}",
+            )
+        }
+        if (safe.isEmpty()) return
+        Tables.Actions.batchInsert(safe, shouldReturnGeneratedValues = false) { action ->
             this[Tables.Actions.actionIdentifier] = getOrCreateActionId(action.identifier)
             this[Tables.Actions.timestamp] = action.timestamp
             this[Tables.Actions.x] = action.pos.x
@@ -644,11 +669,14 @@ object DatabaseManager {
         if (player != null) {
             player.lastJoin = Instant.now()
             player.playerName = name
+            cache.playernameKeys[name] = player.id.value
         } else {
-            Tables.Player.new {
+            val entity = Tables.Player.new {
                 this.playerId = uuid
                 this.playerName = name
             }
+            cache.playerKeys[uuid] = entity.id.value
+            cache.playernameKeys[name] = entity.id.value
         }
     }
 

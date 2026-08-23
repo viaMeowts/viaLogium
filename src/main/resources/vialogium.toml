@@ -44,6 +44,8 @@ sqliteMmapSizeMb = 256
 sqliteBusyTimeoutMs = 5000
 # The location of the database file. Defaults to the world folder if not specified
 #location = "./custom-dir"
+# Allow the database format to be updated on startup (can be slow)
+updateSchema = false
 
 [database_extensions]
 # Database backend to use: SQLITE, MYSQL, MARIADB, POSTGRESQL, H2

@@ -55,7 +55,7 @@ object Tables {
 
     object Actions : IntIdTable("actions") {
         val actionIdentifier = reference("action_id", ActionIdentifiers.id).index()
-        val timestamp = timestamp("time")
+        val timestamp = timestamp("time").index("actions_time_idx")
         val x = integer("x")
         val y = integer("y")
         val z = integer("z")
@@ -71,6 +71,7 @@ object Tables {
 
         init {
             index("actions_by_location", false, x, y, z, world)
+            index("actions_xyz_idx", false, x, y, z)
         }
     }
 

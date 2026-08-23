@@ -4,11 +4,11 @@ import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.commands.BuildableCommand
 import com.viameowts.vialogium.database.DatabaseManager
-import com.viameowts.vialogium.utility.Context
 import com.viameowts.vialogium.utility.LiteralNode
 import com.viameowts.vialogium.utility.MessageUtils
 import com.viameowts.vialogium.utility.TextColorPallet
 import kotlinx.coroutines.launch
+import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
 import net.minecraft.network.chat.Component
@@ -17,13 +17,11 @@ object PageCommand : BuildableCommand {
     override fun build(): LiteralNode = literal("page")
         .then(
             argument("page", IntegerArgumentType.integer(1))
-                .executes { page(it, IntegerArgumentType.getInteger(it, "page")) },
+                .executes { page(it.source, IntegerArgumentType.getInteger(it, "page")) },
         )
         .build()
 
-    private fun page(context: Context, page: Int): Int {
-        val source = context.source
-
+    fun page(source: CommandSourceStack, page: Int): Int {
         val params = ViaLogium.searchCache[source.textName]
         if (params != null) {
             ViaLogium.launch {
