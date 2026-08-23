@@ -3,7 +3,7 @@ package com.viameowts.vialogium.mixin.blocks;
 import com.viameowts.vialogium.callbacks.BlockBreakCallback;
 import com.viameowts.vialogium.utility.Sources;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.PointedDripstoneBlock;
+import net.minecraft.world.level.block.SpeleothemBlock;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
@@ -12,8 +12,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(PointedDripstoneBlock.class)
-public abstract class PointedDripstoneBlockMixin {
+@Mixin(SpeleothemBlock.class)
+public abstract class SpeleothemBlockMixin {
 
     @Inject(method = "tick", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;destroyBlock(Lnet/minecraft/core/BlockPos;Z)Z"))

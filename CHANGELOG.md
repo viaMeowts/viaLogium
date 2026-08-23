@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] - 1.0.0 (Minecraft 26.2 port)
+
+### Changed
+- Ported to MC **26.2** following upstream Ledger ports (bf8192b, 8c6cfa4), adapted across our renamed tree: 41 files (+946/-579).
+- Toolchain: official Mojang mappings (MC unobfuscated), Loom 1.17.x plugin id net.fabricmc.fabric-loom, Gradle 9.5.1, Java toolchain 25, Loader 0.19.3, Fabric API 0.152.1+26.2, Kotlin 2.3.10.
+- viapanel compile dep moved to `lib/mc26/viapanel-3.0.0+mc26.2*.jar` (1.21.11 jars in lib/ root untouched).
+- Mixin adaptations: deobfuscation of lambda/method_ targets, renamed vanilla classes (LilyPad, Farmland, Speleothem, CauldronInteractions...), ContainerInput clicks, sign WrapOperation signature, Fabric API playS2C/serverboundPlay renames, ShowItem ItemStackTemplate hover.
+- testmod fixed (ClientCommandManager removal workaround) - broken even upstream.
+
+### Note
+- Mixin injection targets compile-checked; runtime smoke test on a real 26.2 server recommended before production use.
+
 ## [Unreleased] - 0.4.0 (upstream sync)
 
 Ported from upstream Ledger (commits between fork point 1.3.18 and 1.3.23):

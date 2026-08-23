@@ -61,13 +61,12 @@ data class HandshakeC2SPacket(val nbt: CompoundTag?) : CustomPacketPayload {
                     ServerPlayNetworking.send(player, packet)
                     player.enableNetworking()
                 } else {
-                    player.displayClientMessage(
+                    player.sendSystemMessage(
                         Component.translatable(
                             "text.vialogium.network.protocols_mismatched",
                             Networking.PROTOCOL_VERSION,
                             info.get().protocolVersion,
                         ).setStyle(TextColorPallet.actionNegative),
-                        false,
                     )
                     logInfo(
                         "${player.name.string} joined the server with a ViaLogium compatible client mod, " +
@@ -76,11 +75,10 @@ data class HandshakeC2SPacket(val nbt: CompoundTag?) : CustomPacketPayload {
                     )
                 }
             } else {
-                player.displayClientMessage(
+                player.sendSystemMessage(
                     Component.translatable(
                         "text.vialogium.network.no_mod_info",
                     ).setStyle(TextColorPallet.actionNegative),
-                    false,
                 )
             }
         }

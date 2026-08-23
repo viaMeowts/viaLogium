@@ -26,7 +26,7 @@ data class HandshakeS2CPacket(val protocolVersion: Int, val vialogiumVersion: St
                 HandshakeS2CPacket(protocolVersion, vialogiumVersion, actionTypes)
             })
 
-        override fun receive(payload: HandshakeS2CPacket, context: ClientPlayNetworking.Context?) {
+        override fun receive(payload: HandshakeS2CPacket, context: ClientPlayNetworking.Context) {
             ViaLogiumTest.LOGGER.info("Protocol version: {}", payload.protocolVersion)
             ViaLogiumTest.LOGGER.info("ViaLogium version: {}", payload.vialogiumVersion)
             ViaLogiumTest.LOGGER.info("Number of types registered: {}", payload.actionTypes.size)

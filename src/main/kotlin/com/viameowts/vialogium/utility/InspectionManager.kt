@@ -28,12 +28,11 @@ fun Player.isInspecting() = inspectingUsers.contains(this.uuid)
 
 fun Player.inspectOn(): Int {
     inspectingUsers.add(this.uuid)
-    this.displayClientMessage(
+    this.sendSystemMessage(
         Component.translatable(
             "text.vialogium.inspect.toggle",
             "text.vialogium.inspect.on".translate().setStyle(TextColorPallet.actionPositive),
         ).setStyle(TextColorPallet.secondary),
-        false,
     )
 
     return 1
@@ -41,12 +40,11 @@ fun Player.inspectOn(): Int {
 
 fun Player.inspectOff(): Int {
     inspectingUsers.remove(this.uuid)
-    this.displayClientMessage(
+    this.sendSystemMessage(
         Component.translatable(
             "text.vialogium.inspect.toggle",
             "text.vialogium.inspect.off".translate().setStyle(TextColorPallet.actionNegative),
         ).setStyle(TextColorPallet.secondary),
-        false,
     )
 
     return 1

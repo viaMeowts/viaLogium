@@ -19,6 +19,7 @@ import net.minecraft.util.Util
 import net.minecraft.world.Container
 import net.minecraft.world.WorldlyContainerHolder
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.ItemStackTemplate
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.ChestBlock
@@ -50,7 +51,7 @@ abstract class ItemChangeActionType : AbstractActionType() {
         ).setStyle(TextColorPallet.secondaryVariant).withStyle {
             it.withHoverEvent(
                 HoverEvent.ShowItem(
-                    stack,
+                    ItemStackTemplate(stack.item, stack.componentsPatch),
                 ),
             )
         }

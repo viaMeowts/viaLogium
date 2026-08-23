@@ -23,6 +23,7 @@ import net.minecraft.world.entity.decoration.HangingEntity
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.ItemStackTemplate
 import net.minecraft.world.level.storage.TagValueInput
 
 open class EntityChangeActionType : AbstractActionType() {
@@ -81,7 +82,7 @@ open class EntityChangeActionType : AbstractActionType() {
                 ).setStyle(TextColorPallet.secondaryVariant).withStyle {
                     it.withHoverEvent(
                         HoverEvent.ShowItem(
-                            stack,
+                            ItemStackTemplate(stack.item, stack.componentsPatch),
                         ),
                     )
                 },

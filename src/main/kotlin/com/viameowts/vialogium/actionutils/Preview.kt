@@ -26,12 +26,11 @@ class Preview(private val params: ActionSearchParams, actionCount: Long, player:
     val modifiedItems = mutableMapOf<BlockPos, MutableList<Pair<ItemStack, Boolean>>>()
 
     init {
-        player.displayClientMessage(
+        player.sendSystemMessage(
             Component.translatable(
                 "text.vialogium.preview.start",
                 actionCount,
             ).setStyle(TextColorPallet.primary),
-            false,
         )
     }
 
