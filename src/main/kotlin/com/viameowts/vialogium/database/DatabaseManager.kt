@@ -26,6 +26,7 @@ import net.minecraft.resources.Identifier
 import net.minecraft.server.players.NameAndId
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Op
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.SqlLogger
 import org.jetbrains.exposed.v1.core.Transaction
@@ -41,7 +42,6 @@ import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.statements.StatementContext
 import org.jetbrains.exposed.v1.core.statements.expandArgs
 import org.jetbrains.exposed.v1.dao.Entity
@@ -251,9 +251,9 @@ object DatabaseManager {
             execute {
                 logInfo("Purging actions older than ${config[DatabaseSpec.autoPurgeDays]} days")
                 // Each server purges its own rows: servers sharing a database may keep them for different times.
+                val cutoff = Instant.now().minus(config[DatabaseSpec.autoPurgeDays].toLong(), ChronoUnit.DAYS)
                 val deleted = Tables.Actions.deleteWhere {
-                    (timestamp lessEq Instant.now().minus(config[DatabaseSpec.autoPurgeDays].toLong(), ChronoUnit.DAYS)) and
-                        (server eq ServerIdentity.id)
+                    (timestamp lessEq cutoff) and (server eq ServerIdentity.id)
                 }
                 logInfo("Successfully purged $deleted actions")
             }

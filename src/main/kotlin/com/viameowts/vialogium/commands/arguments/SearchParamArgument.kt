@@ -154,7 +154,8 @@ object SearchParamArgument {
 
                 "server" -> {
                     val server = value as Negatable<String>
-                    if (builder.servers == null) builder.servers = mutableSetOf(server) else builder.servers!!.add(server)
+                    val servers = builder.servers ?: mutableSetOf<Negatable<String>>().also { builder.servers = it }
+                    servers.add(server)
                 }
 
                 "object" -> {
