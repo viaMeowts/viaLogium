@@ -7,6 +7,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Prediction;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,8 +22,8 @@ public abstract class ServerPlayerMixin {
         EntityKillCallback.EVENT.invoker().kill(player.level(), player.blockPosition(), player, source);
     }
 
-    @Inject(method = "drop", at = @At("RETURN"))
-    private void logPlayerItemDrop(ItemStack stack, boolean dropAtSelf, boolean retainOwnership, CallbackInfoReturnable<ItemEntity> cir) {
+    @Inject(method = "drop(Lnet/minecraft/world/item/ItemStack;ZLnet/minecraft/util/Prediction;)Lnet/minecraft/world/entity/item/ItemEntity;", at = @At("RETURN"))
+    private void logPlayerItemDrop(ItemStack stack, boolean dropAtSelf, Prediction prediction, CallbackInfoReturnable<ItemEntity> cir) {
         Player player = (Player) (Object) this;
         var itemEntity = cir.getReturnValue();
         if (itemEntity != null) {

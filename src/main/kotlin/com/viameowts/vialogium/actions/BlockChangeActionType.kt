@@ -33,6 +33,7 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.entity.SignText
+import net.minecraft.world.level.block.entity.SignTextSlot
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.TagValueInput
 
@@ -194,8 +195,8 @@ open class BlockChangeActionType : AbstractActionType() {
             }
             any = true
         }
-        appendSide("Front:", sign.frontText)
-        appendSide("Back:", sign.backText)
+        appendSide("Front:", sign.getText(SignTextSlot.FRONT))
+        appendSide("Back:", sign.getText(SignTextSlot.BACK))
         return if (any) result else null
     }
 

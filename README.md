@@ -35,7 +35,7 @@ The divergence is substantial: at the 0.3.0 baseline the tree differed from upst
 ## Install
 
 - Put viaLogium in your `mods` folder together with Fabric API and `fabric-language-kotlin`.
-- For panel config editing, put a `viapanel-*.jar` build in the same `mods` folder.
+- viaPanel 3.1.0 or newer is required (panel config editing and the server name for shared databases).
 - On first run, config is generated at `config/vialogium.toml`.
 
 ## Database backends
@@ -83,6 +83,17 @@ maxLifetime = 1800000
 Tips:
 - If MariaDB runs in Docker on another host, open port `3306` and use `<host>:3306/vialogium`.
 - If connect fails, temporarily switch `database = "SQLITE"` to start server and validate other config.
+
+## Several servers, one database (Velocity network)
+
+All backends behind a proxy can log into the same PostgreSQL/MariaDB/MySQL database. Every action is stored with the server it happened on.
+
+- The server name comes from viaPanel's `server_id` (`config/viaPanel/viaPanel.toml`). To override it for viaLogium only, set `[database] serverId` in `config/vialogium.toml`. Use the same names as in `velocity.toml`.
+- Point every backend at the same `[database_extensions]` URL.
+- `/vl search`, `/vl near` and inspect show only this server by default. Add `server:<id>` for another server, `server:!<id>` to exclude one, or `server:all` for the whole network. Results from other servers show the server name before the coordinates.
+- `/vl rollback`, `/vl restore` and `/vl preview` only change this server's worlds. With `server:<another server>` they are refused, so run them on the server where the actions happened.
+- Auto-purge (`autoPurgeDays`) deletes only this server's rows, so each server can keep logs for a different time.
+- Upgrading a database from before 1.1.0 adds the `server` column and assigns the existing rows to the first server that starts with the new version. Start the server that owns the old database first.
 
 ## Commands (only `/vl`)
 

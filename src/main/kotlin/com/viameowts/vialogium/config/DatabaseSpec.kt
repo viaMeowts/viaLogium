@@ -38,6 +38,7 @@ object DatabaseSpec : ConfigSpec() {
     val rollbackActionsPerTick by optional<Int>(2_000)
     val previewActionsPerTick by optional<Int>(3_000)
     val logSQL by optional<Boolean>(false)
+    val serverId by optional<String>("")
     val location by optional<String?>(null)
     val updateSchema by optional<Boolean>(false)
 }

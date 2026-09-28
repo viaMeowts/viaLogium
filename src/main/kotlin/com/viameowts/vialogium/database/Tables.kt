@@ -13,6 +13,7 @@ private const val MAX_PLAYER_NAME_LENGTH = 16
 private const val MAX_ACTION_NAME_LENGTH = 16
 private const val MAX_IDENTIFIER_LENGTH = 191
 private const val MAX_SOURCE_NAME_LENGTH = 30
+const val MAX_SERVER_ID_LENGTH = 32
 
 object Tables {
     object Players : IntIdTable("players") {
@@ -68,6 +69,7 @@ object Tables {
         val sourcePlayer = optReference("player_id", Players.id).index()
         val extraData = text("extra_data").nullable()
         val rolledBack = bool("rolled_back").clientDefault { false }.index("actions_rolled_back_idx")
+        val server = varchar("server", MAX_SERVER_ID_LENGTH).default("").index("actions_server_idx")
 
         init {
             index("actions_by_location", false, x, y, z, world)
@@ -90,6 +92,7 @@ object Tables {
         var sourcePlayer by Player optionalReferencedOn Actions.sourcePlayer
         var extraData by Actions.extraData
         var rolledBack by Actions.rolledBack
+        var server by Actions.server
 
         companion object : IntEntityClass<Action>(Actions)
     }
