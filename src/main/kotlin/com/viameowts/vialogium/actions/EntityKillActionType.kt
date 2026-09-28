@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerEntity
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.ProblemReporter
+import net.minecraft.world.entity.UpdateInterval
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.LivingEntity
@@ -63,7 +64,7 @@ open class EntityKillActionType : AbstractActionType() {
         val world = player.level().server.getWorld(world) ?: return
         val entity = getEntity(world, ProblemReporter.DISCARDING) ?: return
 
-        val entityTrackerEntry = ServerEntity(world, entity, 1, false, noopPacketSender)
+        val entityTrackerEntry = ServerEntity(world, entity, UpdateInterval.periodic(1), false, noopPacketSender)
         entityTrackerEntry.addPairing(player)
         preview.spawnedEntityTrackers.add(entityTrackerEntry)
     }
@@ -77,7 +78,7 @@ open class EntityKillActionType : AbstractActionType() {
             val uuid = optionalUuid.get()
             val entity = world?.getEntity(uuid)
             entity?.let {
-                val entityTrackerEntry = ServerEntity(world, entity, 1, false, noopPacketSender)
+                val entityTrackerEntry = ServerEntity(world, entity, UpdateInterval.periodic(1), false, noopPacketSender)
                 entityTrackerEntry.removePairing(player)
                 preview.removedEntityTrackers.add(entityTrackerEntry)
             }
