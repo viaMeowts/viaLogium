@@ -45,6 +45,7 @@
     "error.vialogium.no_more_pages": "Більше немає сторінок",
     "error.vialogium.unknown_param": "Невідомий параметр %s",
     "error.vialogium.no_preview": "Немає поточного попереднього перегляду",
+    "error.vialogium.other_server": "Відкат і відновлення працюють лише на цьому сервері (%s). Запустіть їх на сервері, де були дії",
     "error.vialogium.unspecific.range": "Будь ласка, вкажіть діапазон.",
     "error.vialogium.unspecific.range_to_big": "Максимальний діапазон становить %s.",
     "error.vialogium.unspecific.source_or_time": "Будь ласка, вкажіть джерело або час (після).",
@@ -65,6 +66,7 @@
     "text.vialogium.parameter.object.description": "Фільтрувати за об'єктом. Це може бути блок, предмет або сутність.",
     "text.vialogium.parameter.range.description": "Фільтрувати за локацією (квадратний радіус навколо вашого місця розташування).",
     "text.vialogium.parameter.rolledback.description": "Фільтрувати за відкоченим станом.",
+    "text.vialogium.parameter.server.description": "Сервер, на якому записано дію (типово – цей). server:all шукає по всіх",
     "text.vialogium.parameter.source.description": "Фільтрувати за джерелом (ім'я гравця або джерело з '@').",
     "text.vialogium.parameter.world.description": "Фільтрувати за вказаним виміром.",
 

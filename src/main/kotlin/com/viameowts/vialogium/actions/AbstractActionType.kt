@@ -2,6 +2,7 @@ package com.viameowts.vialogium.actions
 
 import com.viameowts.vialogium.actionutils.Preview
 import com.viameowts.vialogium.utility.MessageUtils
+import com.viameowts.vialogium.utility.ServerIdentity
 import com.viameowts.vialogium.utility.Sources
 import com.viameowts.vialogium.utility.TextColorPallet
 import com.viameowts.vialogium.utility.isCreativeFlagged
@@ -94,6 +95,7 @@ abstract class AbstractActionType : ActionType {
     }
 
     override var rolledBack: Boolean = false
+    override var serverId: String = ""
 
     override fun rollback(server: MinecraftServer): Boolean = false
     override fun previewRollback(preview: Preview, player: ServerPlayer) = Unit
@@ -171,7 +173,17 @@ abstract class AbstractActionType : ActionType {
         )
     }
 
-    open fun getLocationMessage(): Component = "${pos.x} ${pos.y} ${pos.z}".literal()
+    open fun getLocationMessage(): Component {
+        if (!ServerIdentity.isLocal(serverId)) {
+            // Another server's world: show where it was, but there is nothing here to teleport to.
+            return "$serverId ${pos.x} ${pos.y} ${pos.z}".literal()
+                .setStyle(TextColorPallet.secondary)
+                .withStyle { it.withHoverEvent(HoverEvent.ShowText(Component.literal("$serverId\n${world ?: ""}"))) }
+        }
+        return getLocalLocationMessage()
+    }
+
+    private fun getLocalLocationMessage(): Component = "${pos.x} ${pos.y} ${pos.z}".literal()
         .setStyle(TextColorPallet.secondary)
         .withStyle {
             val tag = CompoundTag()

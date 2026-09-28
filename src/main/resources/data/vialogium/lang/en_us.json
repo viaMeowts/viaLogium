@@ -46,6 +46,7 @@
     "error.vialogium.no_more_pages": "No more pages",
     "error.vialogium.unknown_param": "Unknown parameter %s",
     "error.vialogium.no_preview": "No current preview",
+    "error.vialogium.other_server": "Rollback and restore only work on this server (%s). Run them on the server where the actions happened",
     "error.vialogium.unspecific.range": "Please specify a range.",
     "error.vialogium.unspecific.range_to_big": "The maximum range is %s. Use @global to confirm running on the entire server!",
     "error.vialogium.unspecific.source_or_time": "Please specify a source or time (after).",
@@ -80,6 +81,7 @@
     "text.vialogium.parameter.range.description": "Filter by location (square radius around your location).",
     "text.vialogium.parameter.at.description": "Filter by a single block at exact coordinates (x,y,z).",
     "text.vialogium.parameter.rolledback.description": "Filter by rolled back state.",
+    "text.vialogium.parameter.server.description": "Server that logged the action (default: this one). server:all searches every server",
     "text.vialogium.parameter.source.description": "Filter by source (player name or source with '@').",
     "text.vialogium.parameter.world.description": "Filter by provided dimension.",
 

@@ -37,6 +37,7 @@
         "blocks.GrowingPlantBlockMixin",
         "blocks.GrowingPlantHeadBlockMixin",
         "blocks.BambooStalkBlockMixin",
+        "blocks.AbstractBedBlockMixin",
         "blocks.BedBlockMixin",
         "blocks.ButtonBlockMixin",
         "blocks.CactusBlockMixin",

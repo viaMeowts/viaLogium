@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0 (Minecraft 26.3, shared database)
+
+### Added
+- Shared database for a Velocity network: actions store the server they happened on (`server` column, from viaPanel's `server_id` or `[database] serverId`).
+- `server:` search parameter (`server:<id>`, `server:!<id>`, `server:all`). Searches default to this server; results from other servers show the server name.
+- Rollback, restore and preview only touch this server and refuse `server:` pointing elsewhere.
+- Id caches are reloaded when a query meets identifiers, sources or players added by another server.
+
+### Changed
+- Ported to Minecraft 26.3 (Loom 1.17.21, Fabric API 0.161.0+26.3, Loader 0.19.5, viaPanel 3.1.0).
+- Tool conversions (strip, path, till) are logged through one `BlockTransformer` mixin; AxeItem/ShovelItem/HoeItem no longer exist.
+- 25 injection points updated for 26.3 (`setBlockAndUpdate`, sign slots, bed rules, bonemeal source, armor stand kill, item drop prediction and others). All mixins were checked against the 26.3 jar and both test servers start cleanly.
+- Auto-purge only deletes this server's rows.
+- Existing databases get the `server` column on startup; old rows are assigned to the first upgraded server.
+
 ## [Unreleased] - 1.0.0 (Minecraft 26.2 port)
 
 ### Changed

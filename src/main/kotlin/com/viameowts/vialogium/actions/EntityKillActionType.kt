@@ -16,10 +16,10 @@ import net.minecraft.server.level.ServerEntity
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.ProblemReporter
-import net.minecraft.world.entity.UpdateInterval
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.UpdateInterval
 import net.minecraft.world.level.storage.TagValueInput
 import net.minecraft.world.phys.Vec3
 import java.util.function.Predicate
@@ -78,7 +78,13 @@ open class EntityKillActionType : AbstractActionType() {
             val uuid = optionalUuid.get()
             val entity = world?.getEntity(uuid)
             entity?.let {
-                val entityTrackerEntry = ServerEntity(world, entity, UpdateInterval.periodic(1), false, noopPacketSender)
+                val entityTrackerEntry = ServerEntity(
+                    world,
+                    entity,
+                    UpdateInterval.periodic(1),
+                    false,
+                    noopPacketSender,
+                )
                 entityTrackerEntry.removePairing(player)
                 preview.removedEntityTrackers.add(entityTrackerEntry)
             }

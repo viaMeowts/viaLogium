@@ -3,7 +3,6 @@ package com.viameowts.vialogium.mixin.blocks;
 import com.viameowts.vialogium.callbacks.BlockChangeCallback;
 import com.viameowts.vialogium.utility.Sources;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -17,12 +16,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(FarmlandBlock.class)
 public abstract class FarmlandBlockMixin {
 
-    @Inject(method = "turnToDirt", at = @At("HEAD"))
+    @Inject(method = "turnToBaseBlock", at = @At("TAIL"))
     private static void logSetToDirt(Entity entity, BlockState blockState, Level world, BlockPos pos, CallbackInfo ci) {
         if (entity instanceof Player player) {
-            BlockChangeCallback.EVENT.invoker().changeBlock(world, pos, blockState, Blocks.DIRT.defaultBlockState(), null, null, Sources.TRAMPLE, player);
+            BlockChangeCallback.EVENT.invoker().changeBlock(world, pos, blockState, world.getBlockState(pos), null, null, Sources.TRAMPLE, player);
         } else {
-            BlockChangeCallback.EVENT.invoker().changeBlock(world, pos, blockState, Blocks.DIRT.defaultBlockState(), null, null, Sources.TRAMPLE);
+            BlockChangeCallback.EVENT.invoker().changeBlock(world, pos, blockState, world.getBlockState(pos), null, null, Sources.TRAMPLE);
         }
     }
 }

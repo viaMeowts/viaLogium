@@ -30,7 +30,7 @@
         "fabric-language-kotlin": ">=${fabricKotlin}",
         "minecraft": ">=26.3-",
         "fabric-api": ">=${fabricApi}",
-        "viapanel": "*"
+        "viapanel": ">=3.1.0"
     },
     "breaks": {
         "cardboard": "*"

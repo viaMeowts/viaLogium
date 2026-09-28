@@ -62,6 +62,7 @@
 
     "text.vialogium.purge.starting": "------ Starting purge ------",
     "text.vialogium.purge.complete": "------ Completed purge ------",
+    "error.vialogium.other_server": "Rollback and restore only work on this server (%s). Run them on the server where the actions happened",
     "error.vialogium.unspecific.range": "Please specify a range.",
     "error.vialogium.unspecific.range_to_big": "The maximum range is %s. Use @global to confirm running on the entire server!",
     "error.vialogium.unspecific.source_or_time": "Please specify a source or time (after).",
@@ -83,6 +84,7 @@
     "text.vialogium.parameter.object.description": "Filter by matching an object. Could be a block, item or entity.",
     "text.vialogium.parameter.range.description": "Filter by location (square radius around your location).",
     "text.vialogium.parameter.rolledback.description": "Filter by rolled back state.",
+    "text.vialogium.parameter.server.description": "Server that logged the action (default: this one). server:all searches every server",
     "text.vialogium.parameter.source.description": "Filter by source (player name or source with '@').",
     "text.vialogium.parameter.world.description": "Filter by provided dimension.",
     "text.vialogium.purge.confirm_required": "Confirm purge with /vl purge --confirm %1$s (expires in %2$s seconds)",

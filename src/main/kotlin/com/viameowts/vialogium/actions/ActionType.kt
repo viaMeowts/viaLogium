@@ -29,6 +29,9 @@ interface ActionType {
     var extraData: String?
     var rolledBack: Boolean
 
+    /** Server the action happened on (see ServerIdentity). */
+    var serverId: String
+
     /**
      * Stores [tag] as [extraData] but defers the (potentially expensive) NBT -> SNBT text encoding
      * until [extraData] is first read. The snapshot itself must still be built on the main thread

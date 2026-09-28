@@ -17,6 +17,7 @@ import com.viameowts.vialogium.commands.parameters.ObjectParameter
 import com.viameowts.vialogium.commands.parameters.PositionParameter
 import com.viameowts.vialogium.commands.parameters.RangeParameter
 import com.viameowts.vialogium.commands.parameters.RollbackStatusParameter
+import com.viameowts.vialogium.commands.parameters.ServerParameter
 import com.viameowts.vialogium.commands.parameters.SimpleParameter
 import com.viameowts.vialogium.commands.parameters.SourceParameter
 import com.viameowts.vialogium.commands.parameters.TimeParameter
@@ -45,6 +46,7 @@ object SearchParamArgument {
         paramSuggesters["before"] = Parameter(TimeParameter())
         paramSuggesters["after"] = Parameter(TimeParameter())
         paramSuggesters["rolledback"] = Parameter(RollbackStatusParameter())
+        paramSuggesters["server"] = NegatableParameter(ServerParameter())
     }
 
     fun argument(name: String): RequiredArgumentBuilder<CommandSourceStack, String> {
@@ -148,6 +150,11 @@ object SearchParamArgument {
                 "world" -> {
                     val world = value as Negatable<Identifier>
                     if (builder.worlds == null) builder.worlds = mutableSetOf(world) else builder.worlds!!.add(world)
+                }
+
+                "server" -> {
+                    val server = value as Negatable<String>
+                    if (builder.servers == null) builder.servers = mutableSetOf(server) else builder.servers!!.add(server)
                 }
 
                 "object" -> {

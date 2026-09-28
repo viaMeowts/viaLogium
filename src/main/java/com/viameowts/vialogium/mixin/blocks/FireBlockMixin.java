@@ -36,12 +36,12 @@ public abstract class FireBlockMixin {
         method = "checkBurnOut",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"
         )
     )
-    private boolean onSetBlock(Level world, BlockPos pos, BlockState state, int flags, Operation<Boolean> original, @Local BlockState blockState) {
+    private boolean onSetBlock(Level world, BlockPos pos, BlockState state, Operation<Boolean> original, @Local BlockState blockState) {
         BlockEntity oldBlockEntity = world.getBlockEntity(pos);
-        boolean result = original.call(world, pos, state, flags);
+        boolean result = original.call(world, pos, state);
         if (blockState.getBlock() != Blocks.FIRE) {
             BlockChangeCallback.EVENT.invoker().changeBlock(world, pos, blockState, state, oldBlockEntity, world.getBlockEntity(pos), Sources.FIRE, null);
         }

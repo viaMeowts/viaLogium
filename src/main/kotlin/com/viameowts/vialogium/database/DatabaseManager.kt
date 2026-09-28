@@ -14,6 +14,7 @@ import com.viameowts.vialogium.logWarn
 import com.viameowts.vialogium.registry.ActionRegistry
 import com.viameowts.vialogium.utility.Negatable
 import com.viameowts.vialogium.utility.PlayerResult
+import com.viameowts.vialogium.utility.ServerIdentity
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -38,13 +39,16 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.statements.StatementContext
 import org.jetbrains.exposed.v1.core.statements.expandArgs
 import org.jetbrains.exposed.v1.dao.Entity
 import org.jetbrains.exposed.v1.dao.EntityClass
 import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.andWhere
@@ -170,6 +174,7 @@ object DatabaseManager {
             Tables.Sources,
             Tables.Worlds,
         )
+        addServerColumn()
         if (config[DatabaseSpec.updateSchema]) {
             listOf(
                 "CREATE INDEX IF NOT EXISTS actions_rolled_back_idx ON actions (rolled_back)",
@@ -186,33 +191,69 @@ object DatabaseManager {
         logInfo("Tables created")
     }
 
-    suspend fun setupCache() {
-        execute {
-            Tables.ActionIdentifier.all().forEach {
-                cache.actionIdentifierKeys.put(it.identifier, it.id.value)
-            }
-            Tables.World.all().forEach {
-                cache.worldIdentifierKeys.put(it.identifier, it.id.value)
-            }
-            Tables.ObjectIdentifier.all().forEach {
-                cache.objectIdentifierKeys.put(it.identifier, it.id.value)
-            }
-            Tables.Source.all().forEach {
-                cache.sourceKeys.put(it.name, it.id.value)
-            }
-            Tables.Player.all().forEach {
-                cache.playerKeys.put(it.playerId, it.id.value)
-                cache.playernameKeys.forcePut(it.playerName, it.id.value)
+    /**
+     * Databases from before 1.1.0 have no `server` column. They were written by one server, so the
+     * existing rows are assigned to this one.
+     */
+    private fun JdbcTransaction.addServerColumn() {
+        val meta = (connection.connection as java.sql.Connection).metaData
+        val columns = mutableSetOf<String>()
+        for (table in listOf("actions", "ACTIONS")) {
+            meta.getColumns(null, null, table, null).use { rs ->
+                while (rs.next()) columns.add(rs.getString("COLUMN_NAME").lowercase())
             }
         }
+        if (columns.isEmpty() || "server" in columns) return
+
+        logInfo("Adding server column to actions, existing rows belong to '${ServerIdentity.id}'")
+        exec("ALTER TABLE actions ADD COLUMN server VARCHAR($MAX_SERVER_ID_LENGTH) DEFAULT '' NOT NULL")
+        Tables.Actions.update({ Tables.Actions.server eq "" }) { it[server] = ServerIdentity.id }
+        exec("CREATE INDEX IF NOT EXISTS actions_server_idx ON actions (server)")
     }
+
+    suspend fun setupCache() {
+        execute { loadCaches() }
+    }
+
+    /**
+     * (Re)reads the id caches. With a shared database other servers add identifiers, sources and
+     * players too, so a query can reference ids this server has not seen yet.
+     */
+    private fun loadCaches() {
+        Tables.ActionIdentifier.all().forEach {
+            cache.actionIdentifierKeys.forcePut(it.identifier, it.id.value)
+        }
+        Tables.World.all().forEach {
+            cache.worldIdentifierKeys.forcePut(it.identifier, it.id.value)
+        }
+        Tables.ObjectIdentifier.all().forEach {
+            cache.objectIdentifierKeys.forcePut(it.identifier, it.id.value)
+        }
+        Tables.Source.all().forEach {
+            cache.sourceKeys.forcePut(it.name, it.id.value)
+        }
+        Tables.Player.all().forEach {
+            cache.playerKeys.forcePut(it.playerId, it.id.value)
+            cache.playernameKeys.forcePut(it.playerName, it.id.value)
+        }
+    }
+
+    private fun isCached(row: ResultRow): Boolean =
+        cache.actionIdentifierKeys.containsValue(row[Tables.Actions.actionIdentifier].value) &&
+            cache.worldIdentifierKeys.containsValue(row[Tables.Actions.world].value) &&
+            cache.objectIdentifierKeys.containsValue(row[Tables.Actions.objectId].value) &&
+            cache.objectIdentifierKeys.containsValue(row[Tables.Actions.oldObjectId].value) &&
+            cache.sourceKeys.containsValue(row[Tables.Actions.sourceName].value) &&
+            row.getOrNull(Tables.Actions.sourcePlayer).let { it == null || cache.playerKeys.containsValue(it.value) }
 
     suspend fun autoPurge() {
         if (config[DatabaseSpec.autoPurgeDays] > 0) {
             execute {
                 logInfo("Purging actions older than ${config[DatabaseSpec.autoPurgeDays]} days")
+                // Each server purges its own rows: servers sharing a database may keep them for different times.
                 val deleted = Tables.Actions.deleteWhere {
-                    timestamp lessEq Instant.now().minus(config[DatabaseSpec.autoPurgeDays].toLong(), ChronoUnit.DAYS)
+                    (timestamp lessEq Instant.now().minus(config[DatabaseSpec.autoPurgeDays].toLong(), ChronoUnit.DAYS)) and
+                        (server eq ServerIdentity.id)
                 }
                 logInfo("Successfully purged $deleted actions")
             }
@@ -256,21 +297,21 @@ object DatabaseManager {
     suspend fun countRollbackActions(params: ActionSearchParams): Long = execute {
         return@execute Tables.Actions
             .selectAll()
-            .where(buildQueryParams(params) and (Tables.Actions.rolledBack eq false))
+            .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false))
             .count()
     }
 
     suspend fun countRestoreActions(params: ActionSearchParams): Long = execute {
         return@execute Tables.Actions
             .selectAll()
-            .where(buildQueryParams(params) and (Tables.Actions.rolledBack eq true))
+            .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true))
             .count()
     }
 
     suspend fun selectRollbackBatch(params: ActionSearchParams, limit: Int): List<ActionType> = execute {
         val query = Tables.Actions
             .selectAll()
-            .where(buildQueryParams(params) and (Tables.Actions.rolledBack eq false))
+            .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false))
             .orderBy(Tables.Actions.id, SortOrder.DESC)
             .limit(limit.coerceAtLeast(1))
         return@execute getActionsFromQuery(query)
@@ -279,7 +320,7 @@ object DatabaseManager {
     suspend fun selectRestoreBatch(params: ActionSearchParams, limit: Int): List<ActionType> = execute {
         val query = Tables.Actions
             .selectAll()
-            .where(buildQueryParams(params) and (Tables.Actions.rolledBack eq true))
+            .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true))
             .orderBy(Tables.Actions.id, SortOrder.ASC)
             .limit(limit.coerceAtLeast(1))
         return@execute getActionsFromQuery(query)
@@ -290,7 +331,7 @@ object DatabaseManager {
         beforeIdExclusive: Int?,
         limit: Int,
     ): List<ActionType> = execute {
-        var conditions: Op<Boolean> = buildQueryParams(params) and (Tables.Actions.rolledBack eq false)
+        var conditions: Op<Boolean> = buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false)
         if (beforeIdExclusive != null) {
             conditions = conditions and (Tables.Actions.id lessEq (beforeIdExclusive - 1))
         }
@@ -309,7 +350,7 @@ object DatabaseManager {
         afterIdExclusive: Int?,
         limit: Int,
     ): List<ActionType> = execute {
-        var conditions: Op<Boolean> = buildQueryParams(params) and (Tables.Actions.rolledBack eq true)
+        var conditions: Op<Boolean> = buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true)
         if (afterIdExclusive != null) {
             conditions = conditions and (Tables.Actions.id greaterEq (afterIdExclusive + 1))
         }
@@ -326,7 +367,7 @@ object DatabaseManager {
     suspend fun selectRollback(params: ActionSearchParams): List<ActionType> = execute {
         val query = Tables.Actions
             .selectAll()
-            .where(buildQueryParams(params) and (Tables.Actions.rolledBack eq false))
+            .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false))
             .orderBy(Tables.Actions.id, SortOrder.DESC)
         return@execute getActionsFromQuery(query)
     }
@@ -334,7 +375,7 @@ object DatabaseManager {
     suspend fun selectRestore(params: ActionSearchParams): List<ActionType> = execute {
         val query = Tables.Actions
             .selectAll()
-            .where(buildQueryParams(params) and (Tables.Actions.rolledBack eq true))
+            .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true))
             .orderBy(Tables.Actions.id, SortOrder.ASC)
         return@execute getActionsFromQuery(query)
     }
@@ -353,7 +394,7 @@ object DatabaseManager {
         Tables.Actions
             .selectAll()
             .where(
-                buildQueryParams(params) and
+                buildQueryParams(params.localOnly()) and
                     (Tables.Actions.rolledBack eq false) and
                     (Tables.Actions.actionIdentifier eq blockBreakId),
             )
@@ -377,6 +418,8 @@ object DatabaseManager {
 
     private fun getActionsFromQuery(query: Query): List<ActionType> {
         val actions = mutableListOf<ActionType>()
+        val rows = query.toList()
+        if (rows.any { !isCached(it) }) loadCaches()
 
         val actionIdentifierCache = DatabaseCacheService.actionIdentifierKeys.inverse()
         val worldCache = DatabaseCacheService.worldIdentifierKeys.inverse()
@@ -385,7 +428,7 @@ object DatabaseManager {
         val playerCache = DatabaseCacheService.playerKeys.inverse()
         val playerNameCache = DatabaseCacheService.playernameKeys.inverse()
 
-        for (action in query) {
+        for (action in rows) {
             val typeSupplier = ActionRegistry.getType(
                 actionIdentifierCache[action[Tables.Actions.actionIdentifier].value]!!,
             )
@@ -412,6 +455,8 @@ object DatabaseManager {
             }
             type.extraData = action[Tables.Actions.extraData]
             type.rolledBack = action[Tables.Actions.rolledBack]
+            type.serverId = action[Tables.Actions.server]
+            if (type.serverId.isNotEmpty()) ServerIdentity.known.add(type.serverId)
 
             actions.add(type)
         }
@@ -441,6 +486,8 @@ object DatabaseManager {
         if (params.rolledBack != null) {
             op = op.and { Tables.Actions.rolledBack.eq(params.rolledBack) }
         }
+
+        op = addServerParameters(op, params.servers)
 
         op = addParameters(
             op,
@@ -479,6 +526,19 @@ object DatabaseManager {
         )
 
         return op
+    }
+
+    /** No `server:` given means this server only; `server:all` removes the filter. */
+    private fun addServerParameters(op: Op<Boolean>, servers: Collection<Negatable<String>>?): Op<Boolean> {
+        if (servers.isNullOrEmpty()) return op.and { Tables.Actions.server eq ServerIdentity.id }
+        if (servers.any { it.allowed && it.property == ServerIdentity.ALL }) return op
+
+        val allowed = servers.filter { it.allowed }.map { it.property }
+        val denied = servers.filterNot { it.allowed }.map { it.property }
+        var newOp = op
+        if (allowed.isNotEmpty()) newOp = newOp.and { Tables.Actions.server inList allowed }
+        if (denied.isNotEmpty()) newOp = newOp.and { Tables.Actions.server notInList denied }
+        return newOp
     }
 
     private fun <E : Comparable<E>, C : EntityID<E>?, T> addParameters(
@@ -660,6 +720,7 @@ object DatabaseManager {
             this[Tables.Actions.sourceName] = getOrCreateSourceId(action.sourceName)
             this[Tables.Actions.sourcePlayer] = action.sourceProfile?.let { getOrCreatePlayerId(it.id) }
             this[Tables.Actions.extraData] = action.extraData
+            this[Tables.Actions.server] = ServerIdentity.id
         }
     }
 
