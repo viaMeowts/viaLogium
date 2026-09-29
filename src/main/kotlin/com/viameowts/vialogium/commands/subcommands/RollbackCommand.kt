@@ -2,8 +2,13 @@ package com.viameowts.vialogium.commands.subcommands
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.ActionSearchParams
+import com.viameowts.vialogium.actionutils.MIN_SELECT_BATCH_SIZE
+import com.viameowts.vialogium.actionutils.MIN_UPDATE_BATCH_SIZE
+import com.viameowts.vialogium.actionutils.PROGRESS_LOG_INTERVAL_MS
+import com.viameowts.vialogium.actionutils.PROGRESS_MESSAGE_BATCHES
 import com.viameowts.vialogium.actionutils.RollbackBlockTracker
 import com.viameowts.vialogium.actionutils.RollbackLock
+import com.viameowts.vialogium.actionutils.actionsPerSecond
 import com.viameowts.vialogium.commands.BuildableCommand
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
@@ -30,6 +35,7 @@ import net.minecraft.core.Direction
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.ChestBlock
 import net.minecraft.world.level.block.state.properties.ChestType
 
@@ -76,8 +82,10 @@ object RollbackCommand : BuildableCommand {
 
             lock.handOff(
                 context.source.level.launchMain {
-                    val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
-                    val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
+                    val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(
+                        MIN_SELECT_BATCH_SIZE,
+                    )
+                    val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(MIN_UPDATE_BATCH_SIZE)
                     val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
                     val fails = HashMap<String, Int>()
                     var processed = 0L
@@ -160,16 +168,17 @@ object RollbackCommand : BuildableCommand {
                         processed += actions.size
                         cursorId = actions.last().id
                         val now = System.currentTimeMillis()
-                        if (now - lastProgressLogMs >= 30_000L) {
+                        if (now - lastProgressLogMs >= PROGRESS_LOG_INTERVAL_MS) {
                             lastProgressLogMs = now
                             val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
-                            val aps = (processed * 1000L) / elapsedMs
+                            val aps = actionsPerSecond(processed, elapsedMs)
                             logInfo(
-                                "rollback_sla stage=progress source=${source.textName} processed=$processed total=$totalActions " +
+                                "rollback_sla stage=progress source=${source.textName} processed=$processed " +
+                                    "total=$totalActions " +
                                     "elapsedMs=$elapsedMs actionsPerSec=$aps",
                             )
                         }
-                        if (processed % (selectBatchSize * 2L) == 0L) {
+                        if (processed % (selectBatchSize * PROGRESS_MESSAGE_BATCHES) == 0L) {
                             source.sendSuccess(
                                 {
                                     Component.translatable(
@@ -205,11 +214,15 @@ object RollbackCommand : BuildableCommand {
                                             } else {
                                                 ChestType.RIGHT to ChestType.LEFT
                                             }
-                                            world.setBlock(pos, state.setValue(ChestBlock.TYPE, thisType), 3)
+                                            world.setBlock(
+                                                pos,
+                                                state.setValue(ChestBlock.TYPE, thisType),
+                                                Block.UPDATE_ALL,
+                                            )
                                             world.setBlock(
                                                 neighborPos,
                                                 neighborState.setValue(ChestBlock.TYPE, neighborType),
-                                                3,
+                                                Block.UPDATE_ALL,
                                             )
                                             break
                                         }
@@ -234,7 +247,7 @@ object RollbackCommand : BuildableCommand {
 
                     val totalFailed = fails.values.sum()
                     val durationMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(1L)
-                    val actionsPerSec = (processed * 1000L) / durationMs
+                    val actionsPerSec = actionsPerSecond(processed, durationMs)
                     logInfo(
                         "rollback_sla stage=done source=${source.textName} processed=$processed total=$totalActions " +
                             "failed=$totalFailed durationMs=$durationMs actionsPerSec=$actionsPerSec",

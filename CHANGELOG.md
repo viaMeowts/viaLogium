@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1 (database tests)
+
+### Fixed
+- `database = "H2"` could not start: the dialect name was read outside a transaction. H2 was also treated as MySQL (it reports "H2 (MySQL Mode)").
+- MySQL: a row rejected by a CHECK constraint (error 3819) or an unconvertible value (1366) was retried as if the database were down, instead of being dropped alone.
+- MySQL/MariaDB/PostgreSQL name their JDBC driver class explicitly, so the pool does not depend on which class loader the connecting thread has.
+
+### Changed
+- Database integration tests (`src/test`) run on every push against SQLite, H2, PostgreSQL 16, MariaDB 11 and MySQL 8.4: logging, new ids, search, rollback/restore flags, queue drain, bad-row isolation, concurrent reads, chunked purge and auto-purge.
+- detekt findings cleaned up (named constants, wrapped lines, justified suppressions); detekt now fails the build on new findings.
+
 ## 1.2.0 (database hardening)
 
 ### Fixed

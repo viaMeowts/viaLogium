@@ -27,9 +27,10 @@ object MessageUtils {
     val pageChangeAction: Identifier = ViaLogium.identifier("page-change")
     val teleportAction: Identifier = ViaLogium.identifier("teleport")
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     @OptIn(ExperimentalTime::class)
     suspend fun sendSearchResults(source: CommandSourceStack, results: SearchResults, header: Component) {
-        // If the player has a ViaLogium compatible client, we send results as action packets rather than as chat messages
+        // A player with a ViaLogium compatible client gets results as action packets rather than chat messages
         if (source.hasPlayer() && source.playerOrException.hasNetworking()) {
             for (n in results.page..results.pages) {
                 val networkResults = DatabaseManager.searchActions(results.searchParams, n)
@@ -47,7 +48,8 @@ object MessageUtils {
                 source.sendSystemMessage(actionType.getMessage(source))
             } catch (t: Throwable) {
                 logWarn(
-                    "Skipping invalid action message for action id=${actionType.id}, identifier=${actionType.identifier}",
+                    "Skipping invalid action message for action id=${actionType.id}, " +
+                        "identifier=${actionType.identifier}",
                     t,
                 )
             }

@@ -7,6 +7,7 @@ import javax.sql.DataSource
 object MySQL : ViaLogiumDatabase {
     override fun getDataSource(savePath: Path): DataSource = hikariDataSource(
         "jdbc:mysql://",
+        "com.mysql.cj.jdbc.Driver",
         mapOf(
             // Same set as before 1.2.0: timestamps already stored depend on serverTimezone.
             "rewriteBatchedStatements" to "true",

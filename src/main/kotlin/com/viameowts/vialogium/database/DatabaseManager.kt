@@ -92,14 +92,20 @@ private const val COUNT_CACHE_TTL_MS = 60_000L
 private const val COUNT_CACHE_MAX_ENTRIES = 256
 private const val FILE_DB_READ_THREADS = 2
 private const val MAX_READ_THREADS = 8
+private const val MAX_UTF8_BYTES_PER_CHAR = 3
+internal const val BYTES_PER_MB = 1024L * 1024L
 
+// One place for every query; split only if it keeps growing.
+@Suppress("LargeClass")
 object DatabaseManager {
 
     // These values are initialised late to allow the database to be created at server start,
     // which means the database file is located in the world folder and allows for per-world databases.
     private lateinit var database: Database
-    val databaseType: String
-        get() = database.dialect.name
+
+    // Read once inside a transaction: H2's dialect needs a live connection to report its name.
+    var databaseType: String = ""
+        private set
 
     private val cache = DatabaseCacheService
 
@@ -120,8 +126,11 @@ object DatabaseManager {
 
     /** SQLite/H2 live in the world folder, so their writes pause during /save-off backups. */
     private var fileBased = false
-    private val isMysqlFamily: Boolean
-        get() = databaseType.contains("mysql", ignoreCase = true) || databaseType.contains("mariadb", ignoreCase = true)
+
+    // H2 reports itself as "H2 (MySQL Mode)", but it is not MySQL.
+    internal val isMysqlFamily: Boolean
+        get() = !databaseType.startsWith("H2", ignoreCase = true) &&
+            (databaseType.contains("mysql", ignoreCase = true) || databaseType.contains("mariadb", ignoreCase = true))
     private val isPostgres: Boolean
         get() = databaseType.contains("postgres", ignoreCase = true)
 
@@ -139,6 +148,7 @@ object DatabaseManager {
     fun setup(dataSource: DataSource) {
         this.dataSource = dataSource
         database = Database.connect(dataSource)
+        databaseType = transaction(database) { database.dialect.name }
         fileBased = databaseType.contains("sqlite", ignoreCase = true) || databaseType.contains("h2", ignoreCase = true)
         applySqlitePragmasIfNeeded(dataSource)
         writeDispatcher = newSingleThreadContext("viaLogium DB write").also {
@@ -197,7 +207,7 @@ object DatabaseManager {
                         statement.execute("PRAGMA cache_size=-$cacheSizeKb")
                     }
 
-                    val mmapBytes = config[DatabaseSpec.sqliteMmapSizeMb].coerceAtLeast(0).toLong() * 1024L * 1024L
+                    val mmapBytes = config[DatabaseSpec.sqliteMmapSizeMb].coerceAtLeast(0).toLong() * BYTES_PER_MB
                     if (mmapBytes > 0L) {
                         statement.execute("PRAGMA mmap_size=$mmapBytes")
                     }
@@ -864,7 +874,7 @@ object DatabaseManager {
 
     private fun utf8Length(text: String): Int {
         // Every char is at most 3 UTF-8 bytes; skip encoding when even that fits.
-        if (text.length.toLong() * 3 <= extraDataLimit()) return text.length
+        if (text.length.toLong() * MAX_UTF8_BYTES_PER_CHAR <= extraDataLimit()) return text.length
         return text.toByteArray(Charsets.UTF_8).size
     }
 

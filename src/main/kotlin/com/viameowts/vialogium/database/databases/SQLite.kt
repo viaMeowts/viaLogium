@@ -2,6 +2,7 @@ package com.viameowts.vialogium.database.databases
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.config.DatabaseSpec
+import com.viameowts.vialogium.database.BYTES_PER_MB
 import org.sqlite.SQLiteDataSource
 import java.nio.file.Path
 import kotlin.io.path.pathString
@@ -27,7 +28,7 @@ object SQLite : ViaLogiumDatabase {
             params += "cache_size=-$cacheSizeKb"
         }
 
-        val mmapBytes = appConfig[DatabaseSpec.sqliteMmapSizeMb].coerceAtLeast(0).toLong() * 1024L * 1024L
+        val mmapBytes = appConfig[DatabaseSpec.sqliteMmapSizeMb].coerceAtLeast(0).toLong() * BYTES_PER_MB
         if (mmapBytes > 0L) {
             params += "mmap_size=$mmapBytes"
         }

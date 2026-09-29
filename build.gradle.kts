@@ -96,6 +96,11 @@ dependencies {
     includeImplementation(libs.konf.toml)
 
     detektPlugins(libs.detekt.formatting)
+
+    // Database integration tests (DatabaseIntegrationTest), run against a real database in CI
+    testImplementation(libs.fabric.loader.junit)
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 tasks {
@@ -120,6 +125,23 @@ tasks {
 
     jar {
         from("LICENSE")
+    }
+
+    test {
+        useJUnitPlatform()
+        // The mod's config is read from <run dir>/config, so the tests get a fresh copy there.
+        val runDir = layout.buildDirectory.dir("test-run").get().asFile
+        workingDir = runDir
+        doFirst {
+            runDir.resolve("config").mkdirs()
+            file("src/main/resources/vialogium.toml").copyTo(runDir.resolve("config/vialogium.toml"), overwrite = true)
+        }
+        listOf("VIALOGIUM_TEST_DB", "VIALOGIUM_TEST_URL", "VIALOGIUM_TEST_USER", "VIALOGIUM_TEST_PASSWORD")
+            .forEach { inputs.property(it, System.getenv(it) ?: "") }
+        testLogging {
+            events("passed", "failed", "skipped")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 }
 
@@ -155,7 +177,8 @@ publishing {
 detekt {
     buildUponDefaultConfig = true
     autoCorrect = true
-    ignoreFailures = true
+    // The codebase is clean: new findings fail the build and the pre-commit hook.
+    ignoreFailures = false
     config.setFrom(rootProject.files("detekt.yml"))
 }
 

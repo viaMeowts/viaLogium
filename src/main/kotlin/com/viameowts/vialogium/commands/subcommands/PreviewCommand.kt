@@ -2,7 +2,10 @@ package com.viameowts.vialogium.commands.subcommands
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.ActionSearchParams
+import com.viameowts.vialogium.actionutils.MIN_SELECT_BATCH_SIZE
+import com.viameowts.vialogium.actionutils.PROGRESS_LOG_INTERVAL_MS
 import com.viameowts.vialogium.actionutils.Preview
+import com.viameowts.vialogium.actionutils.actionsPerSecond
 import com.viameowts.vialogium.commands.BuildableCommand
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
@@ -80,7 +83,7 @@ object PreviewCommand : BuildableCommand {
 
             val preview = Preview(params, totalActions, player, type)
             val mainThread = McDispatcher + McExecutor(player.level().server::execute)
-            val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
+            val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(MIN_SELECT_BATCH_SIZE)
             val actionsPerTick = ViaLogium.config[DatabaseSpec.previewActionsPerTick].coerceAtLeast(1)
             var actionsSinceYield = 0
             var processed = 0L
@@ -111,13 +114,14 @@ object PreviewCommand : BuildableCommand {
                         }
 
                         val now = System.currentTimeMillis()
-                        if (now - lastProgressLogMs >= 30_000L) {
+                        if (now - lastProgressLogMs >= PROGRESS_LOG_INTERVAL_MS) {
                             lastProgressLogMs = now
                             val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
-                            val aps = (processed * 1000L) / elapsedMs
+                            val aps = actionsPerSecond(processed, elapsedMs)
                             logInfo(
-                                "preview_sla stage=progress player=${player.name.string} type=${type.name.lowercase()} " +
-                                    "processed=$processed total=$totalActions elapsedMs=$elapsedMs actionsPerSec=$aps",
+                                "preview_sla stage=progress player=${player.name.string} " +
+                                    "type=${type.name.lowercase()} processed=$processed total=$totalActions " +
+                                    "elapsedMs=$elapsedMs actionsPerSec=$aps",
                             )
                         }
                     }
@@ -141,13 +145,14 @@ object PreviewCommand : BuildableCommand {
                         }
 
                         val now = System.currentTimeMillis()
-                        if (now - lastProgressLogMs >= 30_000L) {
+                        if (now - lastProgressLogMs >= PROGRESS_LOG_INTERVAL_MS) {
                             lastProgressLogMs = now
                             val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
-                            val aps = (processed * 1000L) / elapsedMs
+                            val aps = actionsPerSecond(processed, elapsedMs)
                             logInfo(
-                                "preview_sla stage=progress player=${player.name.string} type=${type.name.lowercase()} " +
-                                    "processed=$processed total=$totalActions elapsedMs=$elapsedMs actionsPerSec=$aps",
+                                "preview_sla stage=progress player=${player.name.string} " +
+                                    "type=${type.name.lowercase()} processed=$processed total=$totalActions " +
+                                    "elapsedMs=$elapsedMs actionsPerSec=$aps",
                             )
                         }
                     }
@@ -155,7 +160,7 @@ object PreviewCommand : BuildableCommand {
             }
 
             val durationMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(1L)
-            val actionsPerSec = (processed * 1000L) / durationMs
+            val actionsPerSec = actionsPerSecond(processed, durationMs)
             logInfo(
                 "preview_sla stage=done player=${player.name.string} type=${type.name.lowercase()} " +
                     "processed=$processed total=$totalActions durationMs=$durationMs actionsPerSec=$actionsPerSec",

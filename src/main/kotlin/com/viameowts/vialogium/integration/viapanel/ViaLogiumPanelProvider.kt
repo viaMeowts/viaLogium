@@ -10,6 +10,8 @@ import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
 
+private const val ADMIN_PERMISSION_LEVEL = 3
+
 object ViaLogiumPanelProvider : ViaPanelProvider {
     private const val HEADER = "#FFC64C"
     private const val MAIN_TEXT = "#D9D0D5"
@@ -41,7 +43,8 @@ object ViaLogiumPanelProvider : ViaPanelProvider {
 
     override fun panelTitle(): Component = styled(localize("viaLogium Settings", "Настройки viaLogium"), HEADER)
 
-    override fun hasPermission(source: CommandSourceStack): Boolean = Permissions.check(source, "vialogium.viapanel", 3)
+    override fun hasPermission(source: CommandSourceStack): Boolean =
+        Permissions.check(source, "vialogium.viapanel", ADMIN_PERMISSION_LEVEL)
 
     override fun configClass(): Class<*> = ViaLogiumPanelConfig::class.java
 

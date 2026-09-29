@@ -7,6 +7,7 @@ import com.viameowts.vialogium.logWarn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.minecraft.core.BlockPos
+import net.minecraft.core.SectionPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
@@ -28,6 +29,7 @@ object PistonLog {
     @JvmStatic
     fun enabled(): Boolean = ViaLogium.config[ActionsSpec.logPistons]
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     @JvmStatic
     fun scheduleMoveDiff(level: ServerLevel, positions: List<BlockPos>, oldStates: List<BlockState>) {
         if (positions.isEmpty() || positions.size != oldStates.size) return
@@ -38,7 +40,11 @@ object PistonLog {
             server.execute {
                 for ((pos, oldState) in moved) {
                     try {
-                        if (!level.hasChunk(pos.x shr 4, pos.z shr 4)) continue
+                        val loaded = level.hasChunk(
+                            SectionPos.blockToSectionCoord(pos.x),
+                            SectionPos.blockToSectionCoord(pos.z),
+                        )
+                        if (!loaded) continue
                         val newState = level.getBlockState(pos)
                         if (newState == oldState) continue
                         val newBlockEntity: BlockEntity? =

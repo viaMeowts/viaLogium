@@ -1,6 +1,6 @@
 # Установка viaLogium и подключение базы данных
 
-Гайд для viaLogium 1.2.0 на Minecraft 26.3 (Fabric). Подходит и для одного сервера, и для сети серверов за Velocity.
+Гайд для viaLogium 1.2.1 на Minecraft 26.3 (Fabric). Подходит и для одного сервера, и для сети серверов за Velocity.
 
 ## 1. Что нужно
 
@@ -10,7 +10,7 @@
 | Fabric API | 0.161.0+26.3 | `mods/` |
 | Fabric Language Kotlin | 1.13.9+kotlin.2.3.10 | `mods/` |
 | viaPanel | 3.1.0 или новее | `mods/` |
-| viaLogium | 1.2.0 | `mods/` |
+| viaLogium | 1.2.1 | `mods/` |
 | Java | 25 | на машине сервера |
 
 viaLogium – серверный мод, игрокам на клиенте ничего ставить не нужно. Драйверы SQLite, H2, MySQL, MariaDB и PostgreSQL уже внутри jar-файла.
@@ -187,4 +187,5 @@ autoPurgeIntervalHours = 24   # как часто проверять
 | `/vl status` показывает `DEGRADED` | База недоступна. Действия копятся в памяти и запишутся, когда база вернётся; ничего не теряется, пока очередь не упрётся в `maxQueueSize` |
 | `Dropping action the database rejects` | Одна конкретная запись не подходит базе (например, слишком длинное имя от мода). Отбрасывается только она, остальная пачка пишется |
 | Поиск медленный | `/vl status` покажет число записей. Включите `autoPurgeDays`, сузьте поиск параметрами `range:`, `after:` |
+| MySQL: `Public Key Retrieval is not allowed` | Включите SSL на MySQL или добавьте `properties = { allowPublicKeyRetrieval = "true" }` |
 | Нужно быстро поднять сервер без базы | Временно `database = "SQLITE"` |

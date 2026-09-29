@@ -116,6 +116,7 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
         PayloadTypeRegistry.clientboundPlay().register(ResponseS2CPacket.ID, ResponseS2CPacket.CODEC)
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     private fun serverStarting(server: MinecraftServer) {
         this.server = server
         ExtensionManager.serverStarting(server)
@@ -153,6 +154,7 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
 
     // Runs at startup and then every autoPurgeIntervalHours, so a server that stays up for weeks
     // still trims its history instead of only on restart.
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     private fun startAutoPurge() {
         purgeJob = ViaLogium.launch {
             while (isActive) {

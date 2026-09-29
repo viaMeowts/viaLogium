@@ -3,6 +3,7 @@ package com.viameowts.vialogium.database
 import com.uchuhimo.konf.ConfigSpec
 import java.util.concurrent.TimeUnit
 
+@Suppress("MagicNumber")
 object DatabaseExtensionSpec : ConfigSpec("database_extensions") {
     val database by optional(Databases.SQLITE)
     val userName by optional("root", "username")
