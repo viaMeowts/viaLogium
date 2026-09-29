@@ -243,7 +243,8 @@ object ActionQueueService {
                     if (current.javaClass.name.startsWith("org.sqlite") && current.errorCode in SQLITE_DATA_ERRORS) {
                         return true
                     }
-                    if (current.javaClass.name.startsWith("com.mysql") && current.errorCode in MYSQL_DATA_ERRORS) {
+                    // The driver rethrows these as plain java.sql exceptions, so the code is all there is to go on.
+                    if (DatabaseManager.isMysqlFamily && current.errorCode in MYSQL_DATA_ERRORS) {
                         return true
                     }
                 }

@@ -128,7 +128,7 @@ object DatabaseManager {
     private var fileBased = false
 
     // H2 reports itself as "H2 (MySQL Mode)", but it is not MySQL.
-    private val isMysqlFamily: Boolean
+    internal val isMysqlFamily: Boolean
         get() = !databaseType.startsWith("H2", ignoreCase = true) &&
             (databaseType.contains("mysql", ignoreCase = true) || databaseType.contains("mariadb", ignoreCase = true))
     private val isPostgres: Boolean
