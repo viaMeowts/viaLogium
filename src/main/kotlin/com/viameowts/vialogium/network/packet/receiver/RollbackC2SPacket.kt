@@ -2,6 +2,7 @@ package com.viameowts.vialogium.network.packet.receiver
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.RollbackBlockTracker
+import com.viameowts.vialogium.actionutils.RollbackLock
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
 import com.viameowts.vialogium.config.DatabaseSpec
@@ -61,6 +62,14 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                 return
             }
 
+            val lock = RollbackLock.acquire(player.name.string) ?: run {
+                ResponseS2CPacket.sendResponse(
+                    ResponseContent(ViaLogiumPacketTypes.ROLLBACK.id, ResponseCodes.ERROR.code),
+                    sender,
+                )
+                return
+            }
+
             ResponseS2CPacket.sendResponse(
                 ResponseContent(ViaLogiumPacketTypes.ROLLBACK.id, ResponseCodes.EXECUTING.code),
                 sender,
@@ -80,95 +89,97 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                 // of their spilled contents are skipped during rollback.
                 val containerBreakPositions = DatabaseManager.selectContainerBreakPositions(params)
 
-                player.level().launchMain {
-                    val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
-                    val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
-                    val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
-                    val server = player.level().server
-                    var processed = 0L
-                    var actionsSinceYield = 0
-                    var cursorId: Int? = null
-                    val startedAtMs = System.currentTimeMillis()
-                    var lastProgressLogMs = startedAtMs
-                    // Lives for the whole run: actions are global id DESC across batches, so a
-                    // block-break can precede the older block-place / item actions it supersedes.
-                    val blockTracker = RollbackBlockTracker(containerBreakPositions)
+                lock.handOff(
+                    player.level().launchMain {
+                        val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
+                        val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
+                        val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
+                        val server = player.level().server
+                        var processed = 0L
+                        var actionsSinceYield = 0
+                        var cursorId: Int? = null
+                        val startedAtMs = System.currentTimeMillis()
+                        var lastProgressLogMs = startedAtMs
+                        // Lives for the whole run: actions are global id DESC across batches, so a
+                        // block-break can precede the older block-place / item actions it supersedes.
+                        val blockTracker = RollbackBlockTracker(containerBreakPositions)
 
-                    logInfo(
-                        "rollback_sla stage=start source=${player.name.string} mode=network total=$totalActions " +
-                            "selectBatch=$selectBatchSize updateBatch=$updateBatchSize actionsPerTick=$actionsPerTick",
-                    )
+                        logInfo(
+                            "rollback_sla stage=start source=${player.name.string} mode=network total=$totalActions " +
+                                "selectBatch=$selectBatchSize updateBatch=$updateBatchSize actionsPerTick=$actionsPerTick",
+                        )
 
-                    while (true) {
-                        val actions = DatabaseManager.selectRollbackPreviewBatch(params, cursorId, selectBatchSize)
-                        if (actions.isEmpty()) break
+                        while (true) {
+                            val actions = DatabaseManager.selectRollbackPreviewBatch(params, cursorId, selectBatchSize)
+                            if (actions.isEmpty()) break
 
-                        val successfulIds = HashSet<Int>(updateBatchSize)
-                        val updateJobs = mutableListOf<Job>()
+                            val successfulIds = HashSet<Int>(updateBatchSize)
+                            val updateJobs = mutableListOf<Job>()
 
-                        fun flushBatch() {
-                            if (successfulIds.isEmpty()) return
-                            val ids = successfulIds.toSet()
-                            successfulIds.clear()
-                            updateJobs += ViaLogium.launch {
-                                DatabaseManager.rollbackActions(ids)
-                            }
-                        }
-
-                        for (action in actions) {
-                            if (blockTracker.shouldSkip(action)) {
-                                // Already restored (with full state and contents) by a block-break that
-                                // rolled back first. Skip execution, still mark rolled_back.
-                                successfulIds.add(action.id)
-                                if (successfulIds.size >= updateBatchSize) {
-                                    flushBatch()
-                                }
-                            } else if (RollbackExecutionGuard.runWithoutLogging { action.rollback(server) }) {
-                                blockTracker.recordRolledBack(action)
-                                successfulIds.add(action.id)
-                                if (successfulIds.size >= updateBatchSize) {
-                                    flushBatch()
+                            fun flushBatch() {
+                                if (successfulIds.isEmpty()) return
+                                val ids = successfulIds.toSet()
+                                successfulIds.clear()
+                                updateJobs += ViaLogium.launch {
+                                    DatabaseManager.rollbackActions(ids)
                                 }
                             }
 
-                            actionsSinceYield++
-                            if (actionsSinceYield >= actionsPerTick) {
-                                delay(1.ticks)
-                                actionsSinceYield = 0
+                            for (action in actions) {
+                                if (blockTracker.shouldSkip(action)) {
+                                    // Already restored (with full state and contents) by a block-break that
+                                    // rolled back first. Skip execution, still mark rolled_back.
+                                    successfulIds.add(action.id)
+                                    if (successfulIds.size >= updateBatchSize) {
+                                        flushBatch()
+                                    }
+                                } else if (RollbackExecutionGuard.runWithoutLogging { action.rollback(server) }) {
+                                    blockTracker.recordRolledBack(action)
+                                    successfulIds.add(action.id)
+                                    if (successfulIds.size >= updateBatchSize) {
+                                        flushBatch()
+                                    }
+                                }
+
+                                actionsSinceYield++
+                                if (actionsSinceYield >= actionsPerTick) {
+                                    delay(1.ticks)
+                                    actionsSinceYield = 0
+                                }
                             }
+
+                            flushBatch()
+                            updateJobs.joinAll()
+
+                            processed += actions.size
+                            cursorId = actions.last().id
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgressLogMs >= 30_000L) {
+                                lastProgressLogMs = now
+                                val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
+                                val aps = (processed * 1000L) / elapsedMs
+                                logInfo(
+                                    "rollback_sla stage=progress source=${player.name.string} mode=network processed=$processed " +
+                                        "total=$totalActions elapsedMs=$elapsedMs actionsPerSec=$aps",
+                                )
+                            }
+                            if (processed >= totalActions) break
                         }
 
-                        flushBatch()
-                        updateJobs.joinAll()
+                        val durationMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(1L)
+                        val actionsPerSec = (processed * 1000L) / durationMs
+                        logInfo(
+                            "rollback_sla stage=done source=${player.name.string} mode=network processed=$processed total=$totalActions " +
+                                "durationMs=$durationMs actionsPerSec=$actionsPerSec",
+                        )
 
-                        processed += actions.size
-                        cursorId = actions.last().id
-                        val now = System.currentTimeMillis()
-                        if (now - lastProgressLogMs >= 30_000L) {
-                            lastProgressLogMs = now
-                            val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
-                            val aps = (processed * 1000L) / elapsedMs
-                            logInfo(
-                                "rollback_sla stage=progress source=${player.name.string} mode=network processed=$processed " +
-                                    "total=$totalActions elapsedMs=$elapsedMs actionsPerSec=$aps",
-                            )
-                        }
-                        if (processed >= totalActions) break
-                    }
-
-                    val durationMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(1L)
-                    val actionsPerSec = (processed * 1000L) / durationMs
-                    logInfo(
-                        "rollback_sla stage=done source=${player.name.string} mode=network processed=$processed total=$totalActions " +
-                            "durationMs=$durationMs actionsPerSec=$actionsPerSec",
-                    )
-
-                    ResponseS2CPacket.sendResponse(
-                        ResponseContent(ViaLogiumPacketTypes.ROLLBACK.id, ResponseCodes.COMPLETED.code),
-                        sender,
-                    )
-                }
-            }
+                        ResponseS2CPacket.sendResponse(
+                            ResponseContent(ViaLogiumPacketTypes.ROLLBACK.id, ResponseCodes.COMPLETED.code),
+                            sender,
+                        )
+                    },
+                )
+            }.invokeOnCompletion { lock.releaseUnlessHandedOff() }
         }
     }
 }

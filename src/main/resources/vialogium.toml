@@ -5,6 +5,8 @@ queueTimeoutMin = 5
 queueCheckDelaySec = 10
 # Automatically purge entries older than the number of days specified. Set to -1 to disable
 autoPurgeDays = -1
+# How often the auto-purge runs while the server is up (hours). It also runs at startup
+autoPurgeIntervalHours = 24
 # Name of this server when several servers share one database (Velocity network).
 # Every action is stored with it; searches and rollbacks only see this server unless server:<id>/server:all is given.
 # Empty = use viaPanel's server_id (config/viaPanel.toml).
@@ -53,13 +55,20 @@ updateSchema = false
 
 [database_extensions]
 # Database backend to use: SQLITE, MYSQL, MARIADB, POSTGRESQL, H2
+# Guide (Russian): https://github.com/viaMeowts/viaLogium/blob/main/docs/install_ru.md
 database = "SQLITE"
+# host:port/database, e.g. "127.0.0.1:5432/vialogium"
 url = "localhost"
+# username and password may be "env:VARIABLE" (environment variable) or "file:/path" (first line of a file),
+# so the password does not have to be stored in this file
 username = "root"
 password = ""
+# Extra JDBC driver properties, e.g. { sslmode = "require" }
 properties = {}
+# Connections per server: one writes, the rest serve searches. Sum over all servers < database max_connections
 maxPoolSize = 10
-connectionTimeout = 60000
+# How long to wait for a connection (ms). Short, so an outage is reported instead of hanging
+connectionTimeout = 10000
 maxLifetime = 1800000
 
 [search]

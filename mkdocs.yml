@@ -6,6 +6,7 @@ repo_name: QuiltServerTools/Ledger
 nav:
   - index.md
   - install.md
+  - install_ru.md
   - Commands:
     - commands/root.md
     - commands/inspect.md

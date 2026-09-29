@@ -29,7 +29,8 @@ object StatusCommand : BuildableCommand {
     private fun status(context: Context): Int {
         ViaLogium.launch {
             val source = context.source
-            val totalRecords = DatabaseManager.countAllActions()
+            val queueSize = ActionQueueService.size
+            val healthy = ActionQueueService.healthy
             val autoPurgeDays = ViaLogium.config[DatabaseSpec.autoPurgeDays]
             val autoPurgeText = if (autoPurgeDays > 0) "${autoPurgeDays}d" else "disabled"
 
@@ -40,7 +41,7 @@ object StatusCommand : BuildableCommand {
             source.sendSystemMessage(
                 Component.translatable(
                     "text.vialogium.status.queue",
-                    ActionQueueService.size.toString().literal()
+                    queueSize.toString().literal()
                         .setStyle(TextColorPallet.secondaryVariant),
                 ).setStyle(TextColorPallet.secondary),
             )
@@ -48,14 +49,14 @@ object StatusCommand : BuildableCommand {
                 Component.translatable(
                     "text.vialogium.status.logging",
                     (
-                        if (ActionQueueService.healthy) {
+                        if (healthy) {
                             "OK"
                         } else {
                             "DEGRADED - DB writes failing, retrying"
                         }
                         ).literal()
                         .setStyle(
-                            if (ActionQueueService.healthy) TextColorPallet.actionPositive else TextColorPallet.actionNegative,
+                            if (healthy) TextColorPallet.actionPositive else TextColorPallet.actionNegative,
                         ),
                 ).setStyle(TextColorPallet.secondary),
             )
@@ -66,6 +67,9 @@ object StatusCommand : BuildableCommand {
                         .setStyle(TextColorPallet.secondaryVariant),
                 ).setStyle(TextColorPallet.secondary),
             )
+            // Queue and health are sent first: while the database is down this query waits for it.
+            val (count, estimated) = DatabaseManager.estimateAllActions()
+            val totalRecords = if (estimated) "~$count" else count.toString()
             source.sendSystemMessage(
                 Component.translatable(
                     "text.vialogium.status.db_type",

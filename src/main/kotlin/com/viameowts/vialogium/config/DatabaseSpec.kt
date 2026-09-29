@@ -11,6 +11,7 @@ object DatabaseSpec : ConfigSpec() {
     val queueTimeoutMin by required<Long>()
     val queueCheckDelaySec by required<Long>()
     val autoPurgeDays by required<Int>()
+    val autoPurgeIntervalHours by optional<Int>(24)
     val batchSize by optional<Int>(1000)
     val batchDelay by optional<Int>(10)
     val maxQueueSize by optional<Int>(750_000)

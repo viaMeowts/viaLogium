@@ -2,7 +2,6 @@ package com.viameowts.vialogium.utility
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.ActionSearchParams
-import com.viameowts.vialogium.actionutils.SearchResults
 import com.viameowts.vialogium.database.DatabaseManager
 import kotlinx.coroutines.launch
 import net.minecraft.commands.CommandSourceStack
@@ -22,7 +21,7 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf
 import net.minecraft.world.level.levelgen.structure.BoundingBox
 import java.util.*
 
-private val inspectingUsers = HashSet<UUID>()
+private val inspectingUsers: MutableSet<UUID> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
 fun Player.isInspecting() = inspectingUsers.contains(this.uuid)
 
@@ -50,42 +49,44 @@ fun Player.inspectOff(): Int {
     return 1
 }
 
+// Called on the server thread. The world is read here, before switching to the database coroutine:
+// block states and block entities must not be read from other threads.
 fun CommandSourceStack.inspectBlock(pos: BlockPos) {
     val source = this
 
+    var area = BoundingBox(pos)
+
+    val state = source.level.getBlockState(pos)
+    if (state.block is ChestBlock) {
+        getOtherChestSide(state, pos)?.let {
+            area = BoundingBox.fromCorners(pos, it)
+        }
+    } else if (state.block is DoorBlock) {
+        getOtherDoorHalf(state, pos).let {
+            area = BoundingBox.fromCorners(pos, it)
+        }
+    } else if (state.block is BedBlock) {
+        getOtherBedPart(state, pos).let {
+            area = BoundingBox.fromCorners(pos, it)
+        }
+    }
+
+    val isContainerInspection = source.level.getBlockEntity(pos) is Container
+
+    val params = ActionSearchParams.build {
+        bounds = area
+        worlds = mutableSetOf(Negatable.allow(source.level.dimension().identifier()))
+        if (isContainerInspection) {
+            actions = mutableSetOf(
+                Negatable.allow("item-insert"),
+                Negatable.allow("item-remove"),
+            )
+        }
+    }
+
+    ViaLogium.searchCache[source.textName] = params
+
     ViaLogium.launch {
-        var area = BoundingBox(pos)
-
-        val state = source.level.getBlockState(pos)
-        if (state.block is ChestBlock) {
-            getOtherChestSide(state, pos)?.let {
-                area = BoundingBox.fromCorners(pos, it)
-            }
-        } else if (state.block is DoorBlock) {
-            getOtherDoorHalf(state, pos).let {
-                area = BoundingBox.fromCorners(pos, it)
-            }
-        } else if (state.block is BedBlock) {
-            getOtherBedPart(state, pos).let {
-                area = BoundingBox.fromCorners(pos, it)
-            }
-        }
-
-        val isContainerInspection = source.level.getBlockEntity(pos) is Container
-
-        val params = ActionSearchParams.build {
-            bounds = area
-            worlds = mutableSetOf(Negatable.allow(source.level.dimension().identifier()))
-            if (isContainerInspection) {
-                actions = mutableSetOf(
-                    Negatable.allow("item-insert"),
-                    Negatable.allow("item-remove"),
-                )
-            }
-        }
-
-        ViaLogium.searchCache[source.textName] = params
-
         MessageUtils.warnBusy(source)
         val results = DatabaseManager.searchActions(params, 1)
 
@@ -142,7 +143,8 @@ private fun getOtherBedPart(state: BlockState, pos: BlockPos): BlockPos {
     }
 }
 
-suspend fun ServerPlayer.getInspectResults(pos: BlockPos): SearchResults {
+/** Search parameters for inspecting [pos]. Reads the world, so call it on the server thread. */
+fun ServerPlayer.inspectParams(pos: BlockPos): ActionSearchParams {
     val source = this.createCommandSourceStack()
     val isContainerInspection = source.level.getBlockEntity(pos) is Container
 
@@ -158,6 +160,5 @@ suspend fun ServerPlayer.getInspectResults(pos: BlockPos): SearchResults {
     }
 
     ViaLogium.searchCache[source.textName] = params
-    MessageUtils.warnBusy(source)
-    return DatabaseManager.searchActions(params, 1)
+    return params
 }

@@ -18,6 +18,7 @@ import com.viameowts.vialogium.utility.ServerIdentity
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.newSingleThreadContext
@@ -46,7 +47,6 @@ import org.jetbrains.exposed.v1.core.statements.StatementContext
 import org.jetbrains.exposed.v1.core.statements.expandArgs
 import org.jetbrains.exposed.v1.dao.Entity
 import org.jetbrains.exposed.v1.dao.EntityClass
-import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.Query
@@ -54,9 +54,9 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.orWhere
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -64,8 +64,10 @@ import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Function
 import javax.sql.DataSource
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.ceil
 
 const val MAX_QUERY_RETRIES = 5
@@ -76,7 +78,20 @@ const val MIN_RETRY_DELAY = 200L
 // The old 300s cap could freeze the database thread for minutes on a single bad query.
 const val MAX_RETRY_DELAY = 3_000L
 private const val ACTION_UPDATE_CHUNK_SIZE = 900
+
+/** MySQL/MariaDB `TEXT` holds 64 KiB. */
 const val MAX_EXTRA_DATA_BYTES = 65_535
+
+/** Other backends store unbounded text; this only guards the heap against pathological NBT. */
+private const val MAX_EXTRA_DATA_BYTES_UNBOUNDED = 8 * 1024 * 1024
+private const val MAX_PLAYER_NAME_LENGTH = 16
+private const val MAX_SOURCE_NAME_LENGTH = 30
+private const val MAX_IDENTIFIER_LENGTH = 191
+private const val PURGE_CHUNK_SIZE = 5_000
+private const val COUNT_CACHE_TTL_MS = 60_000L
+private const val COUNT_CACHE_MAX_ENTRIES = 256
+private const val FILE_DB_READ_THREADS = 2
+private const val MAX_READ_THREADS = 8
 
 object DatabaseManager {
 
@@ -93,7 +108,25 @@ object DatabaseManager {
     @Volatile
     var bypassSaveStateWait: Boolean = false
 
-    private var databaseContext = Dispatchers.IO + CoroutineName("ViaLogium Database")
+    @Volatile
+    var serverStarted: Boolean = false
+
+    // Writes (logging, rollback flags, purge) run on one thread, in order. Reads (search, inspect,
+    // previews, status) run beside them, so a big batch insert no longer holds up an inspect click.
+    private var writeDispatcher: ExecutorCoroutineDispatcher? = null
+    private var writeContext: CoroutineContext = Dispatchers.IO + CoroutineName("viaLogium DB write")
+    private var readContext: CoroutineContext = Dispatchers.IO + CoroutineName("viaLogium DB read")
+    private var dataSource: DataSource? = null
+
+    /** SQLite/H2 live in the world folder, so their writes pause during /save-off backups. */
+    private var fileBased = false
+    private val isMysqlFamily: Boolean
+        get() = databaseType.contains("mysql", ignoreCase = true) || databaseType.contains("mariadb", ignoreCase = true)
+    private val isPostgres: Boolean
+        get() = databaseType.contains("postgres", ignoreCase = true)
+
+    private data class CachedCount(val value: Long, val atMs: Long)
+    private val countCache = ConcurrentHashMap<ActionSearchParams, CachedCount>()
     private val vialogiumLogger = object : SqlLogger {
         override fun log(context: StatementContext, transaction: Transaction) {
             // debug level: requires BOTH the logSQL config flag and a debug-enabled logger, so a
@@ -104,15 +137,37 @@ object DatabaseManager {
 
     @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
     fun setup(dataSource: DataSource) {
+        this.dataSource = dataSource
         database = Database.connect(dataSource)
+        fileBased = databaseType.contains("sqlite", ignoreCase = true) || databaseType.contains("h2", ignoreCase = true)
         applySqlitePragmasIfNeeded(dataSource)
-        databaseContext = newSingleThreadContext("viaLogium Database")
+        writeDispatcher = newSingleThreadContext("viaLogium DB write").also {
+            writeContext = it + CoroutineName("viaLogium DB write")
+        }
+        val readThreads = if (fileBased) {
+            FILE_DB_READ_THREADS
+        } else {
+            // Leave one pooled connection to the writer.
+            (config[DatabaseExtensionSpec.maxPoolSize] - 1).coerceIn(1, MAX_READ_THREADS)
+        }
+        readContext = Dispatchers.IO.limitedParallelism(readThreads) + CoroutineName("viaLogium DB read")
+        logInfo("Database: $databaseType, 1 write thread, $readThreads read threads")
         if (config[DatabaseSpec.logSQL]) {
             logWarn(
                 "logSQL is enabled: every SQL statement is logged on the database thread. " +
                     "This is for short-term debugging only — disable it in production.",
             )
         }
+    }
+
+    /** Stops the write thread and closes the connection pool. Called once the queue is drained. */
+    fun close() {
+        writeDispatcher?.close()
+        writeDispatcher = null
+        (dataSource as? AutoCloseable)?.let { closeable ->
+            runCatching { closeable.close() }.onFailure { logWarn("Closing the database pool failed", it) }
+        }
+        dataSource = null
     }
 
     private fun applySqlitePragmasIfNeeded(dataSource: DataSource) {
@@ -164,7 +219,7 @@ object DatabaseManager {
         }
     }
 
-    fun ensureTables() = transaction {
+    fun ensureTables() = transaction(database) {
         addLogger(vialogiumLogger)
         SchemaUtils.create(
             Tables.Players,
@@ -175,20 +230,8 @@ object DatabaseManager {
             Tables.Worlds,
         )
         addServerColumn()
-        if (config[DatabaseSpec.updateSchema]) {
-            listOf(
-                "CREATE INDEX IF NOT EXISTS actions_rolled_back_idx ON actions (rolled_back)",
-                "CREATE INDEX IF NOT EXISTS actions_xyz_idx ON actions (x, y, z)",
-                "CREATE INDEX IF NOT EXISTS actions_time_idx ON actions (time)",
-            ).forEach { ddl ->
-                runCatching {
-                    exec(ddl)
-                }.onFailure {
-                    logWarn("Schema update skipped: $ddl failed: ${it.message}")
-                }
-            }
-        }
-        logInfo("Tables created")
+        migrateIndexes()
+        logInfo("Tables ready")
     }
 
     /**
@@ -196,9 +239,8 @@ object DatabaseManager {
      * existing rows are assigned to this one.
      */
     private fun JdbcTransaction.addServerColumn() {
-        val meta = (connection.connection as java.sql.Connection).metaData
         val columns = mutableSetOf<String>()
-        for (table in listOf("actions", "ACTIONS")) {
+        forEachActionsTableName { meta, table ->
             meta.getColumns(null, null, table, null).use { rs ->
                 while (rs.next()) columns.add(rs.getString("COLUMN_NAME").lowercase())
             }
@@ -208,11 +250,55 @@ object DatabaseManager {
         logInfo("Adding server column to actions, existing rows belong to '${ServerIdentity.id}'")
         exec("ALTER TABLE actions ADD COLUMN server VARCHAR($MAX_SERVER_ID_LENGTH) DEFAULT '' NOT NULL")
         Tables.Actions.update({ Tables.Actions.server eq "" }) { it[server] = ServerIdentity.id }
-        exec("CREATE INDEX IF NOT EXISTS actions_server_idx ON actions (server)")
+    }
+
+    /**
+     * Brings the indexes of databases created by older versions in line with [Tables.Actions]:
+     * searches, purges and rollbacks filter by server and time, and `(x, y, z)` alone duplicated the
+     * leading columns of `actions_by_location`, costing every insert for nothing.
+     */
+    private fun JdbcTransaction.migrateIndexes() {
+        val existing = actionsIndexNames()
+        if (existing.isEmpty()) return
+        fun create(name: String, columns: String) {
+            if (name in existing) return
+            logInfo("Creating index $name, this can take a while on a large database")
+            runCatching { exec("CREATE INDEX $name ON actions ($columns)") }
+                .onFailure { logWarn("Could not create index $name: ${it.message}") }
+        }
+        fun drop(name: String) {
+            if (name !in existing) return
+            val ddl = if (isMysqlFamily) "DROP INDEX $name ON actions" else "DROP INDEX $name"
+            runCatching { exec(ddl) }.onFailure { logWarn("Could not drop index $name: ${it.message}") }
+        }
+        create("actions_server_time_idx", "server, time")
+        create("actions_by_location", "x, y, z, world_id")
+        drop("actions_xyz_idx")
+        drop("actions_server_idx")
+        if (config[DatabaseSpec.updateSchema]) {
+            create("actions_time_idx", "time")
+            create("actions_rolled_back_idx", "rolled_back")
+        }
+    }
+
+    private fun JdbcTransaction.actionsIndexNames(): Set<String> {
+        val names = mutableSetOf<String>()
+        forEachActionsTableName { meta, table ->
+            meta.getIndexInfo(null, null, table, false, true).use { rs ->
+                while (rs.next()) rs.getString("INDEX_NAME")?.let { names.add(it.lowercase()) }
+            }
+        }
+        return names
+    }
+
+    // Unquoted names are stored lower case by PostgreSQL/SQLite/MySQL and upper case by H2.
+    private fun JdbcTransaction.forEachActionsTableName(block: (java.sql.DatabaseMetaData, String) -> Unit) {
+        val meta = (connection.connection as java.sql.Connection).metaData
+        for (table in listOf("actions", "ACTIONS")) block(meta, table)
     }
 
     suspend fun setupCache() {
-        execute { loadCaches() }
+        read { loadCaches() }
     }
 
     /**
@@ -247,90 +333,115 @@ object DatabaseManager {
             row.getOrNull(Tables.Actions.sourcePlayer).let { it == null || cache.playerKeys.containsValue(it.value) }
 
     suspend fun autoPurge() {
-        if (config[DatabaseSpec.autoPurgeDays] > 0) {
-            execute {
-                logInfo("Purging actions older than ${config[DatabaseSpec.autoPurgeDays]} days")
-                // Each server purges its own rows: servers sharing a database may keep them for different times.
-                val cutoff = Instant.now().minus(config[DatabaseSpec.autoPurgeDays].toLong(), ChronoUnit.DAYS)
-                val deleted = Tables.Actions.deleteWhere {
-                    (timestamp lessEq cutoff) and (server eq ServerIdentity.id)
+        val days = config[DatabaseSpec.autoPurgeDays]
+        if (days <= 0) return
+        logInfo("Purging actions older than $days days")
+        // Each server purges its own rows: servers sharing a database may keep them for different times.
+        val cutoff = Instant.now().minus(days.toLong(), ChronoUnit.DAYS)
+        val deleted = deleteInChunks {
+            (Tables.Actions.timestamp lessEq cutoff) and
+                (Tables.Actions.server eq ServerIdentity.id)
+        }
+        logInfo("Successfully purged $deleted actions")
+    }
+
+    suspend fun searchActions(params: ActionSearchParams, page: Int): SearchResults = read {
+        return@read selectActionsSearch(params, page)
+    }
+
+    suspend fun countActions(params: ActionSearchParams): Long = read {
+        return@read countActions(params)
+    }
+
+    suspend fun countAllActions(): Long = read {
+        return@read Tables.Actions.selectAll().count()
+    }
+
+    /**
+     * Row count for `/vl status`. PostgreSQL and MySQL answer from table statistics (second = true,
+     * shown with `~`) because an exact `COUNT(*)` over a network's history is a full scan.
+     */
+    suspend fun estimateAllActions(): Pair<Long, Boolean> = read {
+        val estimate: Long? = runCatching {
+            when {
+                isPostgres -> exec("SELECT reltuples::bigint FROM pg_class WHERE relname = 'actions'") { rs ->
+                    if (rs.next()) rs.getLong(1) else null
                 }
-                logInfo("Successfully purged $deleted actions")
+
+                isMysqlFamily -> exec(
+                    "SELECT TABLE_ROWS FROM information_schema.TABLES " +
+                        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'actions'",
+                ) { rs -> if (rs.next()) rs.getLong(1) else null }
+
+                else -> null
             }
+        }.getOrNull()
+        if (estimate != null && estimate >= 0) {
+            estimate to true
+        } else {
+            Tables.Actions.selectAll().count() to false
         }
     }
 
-    suspend fun searchActions(params: ActionSearchParams, page: Int): SearchResults = execute {
-        return@execute selectActionsSearch(params, page)
-    }
-
-    suspend fun countActions(params: ActionSearchParams): Long = execute {
-        return@execute countActions(params)
-    }
-
-    suspend fun countAllActions(): Long = execute {
-        return@execute Tables.Actions.selectAll().count()
-    }
-
-    suspend fun rollbackActions(params: ActionSearchParams): List<ActionType> = execute {
+    suspend fun rollbackActions(params: ActionSearchParams): List<ActionType> {
         val actions = selectRollback(params)
         val actionIds = actions.map { it.id }.toSet()
         rollbackActions(actionIds)
-        return@execute actions
+        return actions
     }
 
     suspend fun rollbackActions(actionIds: Set<Int>) = execute {
         return@execute rollbackActions(actionIds)
     }
 
-    suspend fun restoreActions(params: ActionSearchParams): List<ActionType> = execute {
+    suspend fun restoreActions(params: ActionSearchParams): List<ActionType> {
         val actions = selectRestore(params)
         val actionIds = actions.map { it.id }.toSet()
         restoreActions(actionIds)
-        return@execute actions
+        return actions
     }
 
     suspend fun restoreActions(actionIds: Set<Int>) = execute {
         return@execute restoreActions(actionIds)
     }
 
-    suspend fun countRollbackActions(params: ActionSearchParams): Long = execute {
-        return@execute Tables.Actions
+    suspend fun countRollbackActions(params: ActionSearchParams): Long = read {
+        return@read Tables.Actions
             .selectAll()
             .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false))
             .count()
     }
 
-    suspend fun countRestoreActions(params: ActionSearchParams): Long = execute {
-        return@execute Tables.Actions
+    suspend fun countRestoreActions(params: ActionSearchParams): Long = read {
+        return@read Tables.Actions
             .selectAll()
             .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true))
             .count()
     }
 
-    suspend fun selectRollbackBatch(params: ActionSearchParams, limit: Int): List<ActionType> = execute {
+    suspend fun selectRollbackBatch(params: ActionSearchParams, limit: Int): List<ActionType> = read {
         val query = Tables.Actions
             .selectAll()
             .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false))
             .orderBy(Tables.Actions.id, SortOrder.DESC)
             .limit(limit.coerceAtLeast(1))
-        return@execute getActionsFromQuery(query)
+        return@read getActionsFromQuery(query)
     }
 
-    suspend fun selectRestoreBatch(params: ActionSearchParams, limit: Int): List<ActionType> = execute {
+    suspend fun selectRestoreBatch(params: ActionSearchParams, limit: Int): List<ActionType> = read {
         val query = Tables.Actions
             .selectAll()
             .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true))
             .orderBy(Tables.Actions.id, SortOrder.ASC)
             .limit(limit.coerceAtLeast(1))
-        return@execute getActionsFromQuery(query)
+        return@read getActionsFromQuery(query)
     }
 
     suspend fun selectRollbackPreviewBatch(
         params: ActionSearchParams,
         beforeIdExclusive: Int?,
         limit: Int,
-    ): List<ActionType> = execute {
+    ): List<ActionType> = read {
         var conditions: Op<Boolean> = buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false)
         if (beforeIdExclusive != null) {
             conditions = conditions and (Tables.Actions.id lessEq (beforeIdExclusive - 1))
@@ -342,14 +453,14 @@ object DatabaseManager {
             .orderBy(Tables.Actions.id, SortOrder.DESC)
             .limit(limit.coerceAtLeast(1))
 
-        return@execute getActionsFromQuery(query)
+        return@read getActionsFromQuery(query)
     }
 
     suspend fun selectRestorePreviewBatch(
         params: ActionSearchParams,
         afterIdExclusive: Int?,
         limit: Int,
-    ): List<ActionType> = execute {
+    ): List<ActionType> = read {
         var conditions: Op<Boolean> = buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true)
         if (afterIdExclusive != null) {
             conditions = conditions and (Tables.Actions.id greaterEq (afterIdExclusive + 1))
@@ -361,23 +472,23 @@ object DatabaseManager {
             .orderBy(Tables.Actions.id, SortOrder.ASC)
             .limit(limit.coerceAtLeast(1))
 
-        return@execute getActionsFromQuery(query)
+        return@read getActionsFromQuery(query)
     }
 
-    suspend fun selectRollback(params: ActionSearchParams): List<ActionType> = execute {
+    suspend fun selectRollback(params: ActionSearchParams): List<ActionType> = read {
         val query = Tables.Actions
             .selectAll()
             .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq false))
             .orderBy(Tables.Actions.id, SortOrder.DESC)
-        return@execute getActionsFromQuery(query)
+        return@read getActionsFromQuery(query)
     }
 
-    suspend fun selectRestore(params: ActionSearchParams): List<ActionType> = execute {
+    suspend fun selectRestore(params: ActionSearchParams): List<ActionType> = read {
         val query = Tables.Actions
             .selectAll()
             .where(buildQueryParams(params.localOnly()) and (Tables.Actions.rolledBack eq true))
             .orderBy(Tables.Actions.id, SortOrder.ASC)
-        return@execute getActionsFromQuery(query)
+        return@read getActionsFromQuery(query)
     }
 
     /**
@@ -387,8 +498,8 @@ object DatabaseManager {
      * avoiding duplication). A pre-scan is required because those item actions are newer than the
      * break and would otherwise be processed before it in id-DESC order.
      */
-    suspend fun selectContainerBreakPositions(params: ActionSearchParams): Set<String> = execute {
-        val blockBreakId = cache.actionIdentifierKeys["block-break"] ?: return@execute emptySet<String>()
+    suspend fun selectContainerBreakPositions(params: ActionSearchParams): Set<String> = read {
+        val blockBreakId = cache.actionIdentifierKeys["block-break"] ?: return@read emptySet<String>()
         val worldInverse = cache.worldIdentifierKeys.inverse()
         val positions = HashSet<String>()
         Tables.Actions
@@ -406,14 +517,12 @@ object DatabaseManager {
                     "$worldIdentifier:${row[Tables.Actions.x]}:${row[Tables.Actions.y]}:${row[Tables.Actions.z]}",
                 )
             }
-        return@execute positions
+        return@read positions
     }
 
-    suspend fun previewActions(params: ActionSearchParams, type: Preview.Type): List<ActionType> = execute {
-        when (type) {
-            Preview.Type.ROLLBACK -> return@execute selectRollback(params)
-            Preview.Type.RESTORE -> return@execute selectRestore(params)
-        }
+    suspend fun previewActions(params: ActionSearchParams, type: Preview.Type): List<ActionType> = when (type) {
+        Preview.Type.ROLLBACK -> selectRollback(params)
+        Preview.Type.RESTORE -> selectRestore(params)
     }
 
     private fun getActionsFromQuery(query: Query): List<ActionType> {
@@ -429,24 +538,28 @@ object DatabaseManager {
         val playerNameCache = DatabaseCacheService.playernameKeys.inverse()
 
         for (action in rows) {
-            val typeSupplier = ActionRegistry.getType(
-                actionIdentifierCache[action[Tables.Actions.actionIdentifier].value]!!,
-            )
-            if (typeSupplier == null) {
-                logWarn("Unknown action type ${actionIdentifierCache[action[Tables.Actions.actionIdentifier].value]}")
+            val actionName = actionIdentifierCache[action[Tables.Actions.actionIdentifier].value]
+            val objectIdentifier = objectIdentifierCache[action[Tables.Actions.objectId].value]
+            val oldObjectIdentifier = objectIdentifierCache[action[Tables.Actions.oldObjectId].value]
+            val sourceName = sourceCache[action[Tables.Actions.sourceName].value]
+            if (actionName == null || objectIdentifier == null || oldObjectIdentifier == null || sourceName == null) {
+                // Another server added the id after our reload; the row shows up on the next query.
+                logWarn("Skipping action ${action[Tables.Actions.id].value}: unknown identifier ids")
                 continue
             }
+            // Types registered by an extension on another server are unknown here.
+            val typeSupplier = ActionRegistry.getType(actionName) ?: continue
 
             val type = typeSupplier.get()
             type.id = action[Tables.Actions.id].value
             type.timestamp = action[Tables.Actions.timestamp]
             type.pos = BlockPos(action[Tables.Actions.x], action[Tables.Actions.y], action[Tables.Actions.z])
             type.world = worldCache[action[Tables.Actions.world].value]
-            type.objectIdentifier = objectIdentifierCache[action[Tables.Actions.objectId].value]!!
-            type.oldObjectIdentifier = objectIdentifierCache[action[Tables.Actions.oldObjectId].value]!!
+            type.objectIdentifier = objectIdentifier
+            type.oldObjectIdentifier = oldObjectIdentifier
             type.objectState = action[Tables.Actions.blockState]
             type.oldObjectState = action[Tables.Actions.oldBlockState]
-            type.sourceName = sourceCache[action[Tables.Actions.sourceName].value]!!
+            type.sourceName = sourceName
             type.sourceProfile = action.getOrNull(Tables.Actions.sourcePlayer)?.let {
                 val id = it.value
                 val uuid = playerCache[id]
@@ -616,10 +729,22 @@ object DatabaseManager {
         return newOp
     }
 
+    /**
+     * Writes one batch. Ids for new players, sources, worlds and identifiers are created first in
+     * their own committed transaction and only then cached, so a failed batch can never leave ids in
+     * the cache that were rolled back (which used to break every later batch with a foreign key error).
+     */
     suspend fun logActionBatch(actions: List<ActionType>) {
-        execute {
-            insertActions(actions)
+        val storable = actions.filter(::isStorable)
+        if (storable.isEmpty()) return
+
+        val missing = MissingKeys.of(storable)
+        if (!missing.isEmpty()) {
+            val resolved = execute { resolveKeys(missing) }
+            resolved.applyToCache()
         }
+        // One attempt: ActionQueueService owns retries and can split a batch the database rejects.
+        execute(attempts = 1) { insertActions(storable) }
     }
 
     suspend fun registerWorld(identifier: Identifier) = execute {
@@ -630,46 +755,91 @@ object DatabaseManager {
         insertActionType(id)
     }
 
-    suspend fun logPlayer(uuid: UUID, name: String) = execute {
-        insertOrUpdatePlayer(uuid, name)
+    suspend fun logPlayer(uuid: UUID, name: String) {
+        val playerName = name.take(MAX_PLAYER_NAME_LENGTH)
+        val id = execute { upsertPlayer(uuid, playerName) }
+        cache.playerKeys.forcePut(uuid, id)
+        cache.playernameKeys.forcePut(playerName, id)
     }
 
     suspend fun insertIdentifiers(identifiers: Collection<Identifier>) = execute {
-        insertRegKeys(identifiers)
+        insertRegKeys(identifiers.filter { it.toString().length <= MAX_IDENTIFIER_LENGTH })
     }
 
-    private suspend fun <T : Any?> execute(body: suspend Transaction.() -> T): T {
-        if (!bypassSaveStateWait) {
-            var warnedSavePause = false
-            while (ViaLogium.server.overworld()?.noSave != false) {
-                if (!warnedSavePause) {
-                    logWarn("DB writes paused: vanilla save-off is active (/save-off? backup in progress?)")
-                    warnedSavePause = true
+    /** Queries that change the database: one thread, in order. */
+    private suspend fun <T> execute(attempts: Int = MAX_QUERY_RETRIES, body: suspend JdbcTransaction.() -> T): T {
+        // Only file databases in the world folder need to hold still for a /save-off backup; a
+        // PostgreSQL/MySQL server shared by the network has nothing to do with this world's files.
+        if (fileBased && !bypassSaveStateWait) awaitSaveEnabled()
+        return transactionOn(writeContext, attempts, body)
+    }
+
+    /** Queries that only read: run beside the writer so searches don't wait behind batch inserts. */
+    private suspend fun <T> read(body: suspend JdbcTransaction.() -> T): T =
+        transactionOn(readContext, MAX_QUERY_RETRIES, body)
+
+    private suspend fun <T> transactionOn(
+        context: CoroutineContext,
+        attempts: Int,
+        body: suspend JdbcTransaction.() -> T,
+    ): T = newSuspendedTransaction(context = context, db = database) {
+        maxAttempts = attempts
+        minRetryDelay = MIN_RETRY_DELAY
+        maxRetryDelay = MAX_RETRY_DELAY
+
+        if (ViaLogium.config[DatabaseSpec.logSQL]) {
+            addLogger(vialogiumLogger)
+        }
+        body(this)
+    }
+
+    private suspend fun awaitSaveEnabled() {
+        var warnedSavePause = false
+        while (!bypassSaveStateWait && ViaLogium.server.overworld()?.noSave != false) {
+            // Worlds report noSave while the server is still starting: wait without a false alarm.
+            if (!warnedSavePause && serverStarted) {
+                logWarn("DB writes paused: vanilla save-off is active (/save-off? backup in progress?)")
+                warnedSavePause = true
+            }
+            delay(timeMillis = 1000)
+        }
+    }
+
+    suspend fun purgeActions(params: ActionSearchParams): Int = deleteInChunks { buildQueryParams(params) }
+
+    /**
+     * Deletes matching rows [PURGE_CHUNK_SIZE] at a time, each chunk in its own short transaction, so
+     * a purge of millions of rows neither locks the table for minutes nor stalls logging meanwhile.
+     */
+    private suspend fun deleteInChunks(condition: () -> Op<Boolean>): Int {
+        var total = 0
+        while (true) {
+            val (deleted, done) = execute {
+                val op = condition()
+                val lastId = Tables.Actions
+                    .select(Tables.Actions.id)
+                    .where(op)
+                    .orderBy(Tables.Actions.id, SortOrder.ASC)
+                    .limit(1)
+                    .offset((PURGE_CHUNK_SIZE - 1).toLong())
+                    .firstOrNull()
+                    ?.get(Tables.Actions.id)
+                    ?.value
+                if (lastId == null) {
+                    Tables.Actions.deleteWhere { op } to true
+                } else {
+                    Tables.Actions.deleteWhere { op and (Tables.Actions.id lessEq lastId) } to false
                 }
-                delay(timeMillis = 1000)
             }
+            total += deleted
+            if (done) break
         }
-
-        return newSuspendedTransaction(context = databaseContext, db = database) {
-            maxAttempts = MAX_QUERY_RETRIES
-            minRetryDelay = MIN_RETRY_DELAY
-            maxRetryDelay = MAX_RETRY_DELAY
-
-            if (ViaLogium.config[DatabaseSpec.logSQL]) {
-                addLogger(vialogiumLogger)
-            }
-            body(this)
-        }
+        countCache.clear()
+        return total
     }
 
-    suspend fun purgeActions(params: ActionSearchParams) {
-        execute {
-            purgeActions(params)
-        }
-    }
-
-    suspend fun searchPlayers(players: Set<NameAndId>): List<PlayerResult> = execute {
-        return@execute selectPlayers(players)
+    suspend fun searchPlayers(players: Set<NameAndId>): List<PlayerResult> = read {
+        return@read selectPlayers(players)
     }
 
     private fun Transaction.insertActionType(id: String) {
@@ -690,77 +860,204 @@ object DatabaseManager {
         }
     }
 
-    private fun Transaction.insertActions(actions: List<ActionType>) {
-        val (safe, oversized) = actions.partition {
-            it.extraData == null || it.extraData!!.length <= MAX_EXTRA_DATA_BYTES
+    private fun extraDataLimit(): Int = if (isMysqlFamily) MAX_EXTRA_DATA_BYTES else MAX_EXTRA_DATA_BYTES_UNBOUNDED
+
+    private fun utf8Length(text: String): Int {
+        // Every char is at most 3 UTF-8 bytes; skip encoding when even that fits.
+        if (text.length.toLong() * 3 <= extraDataLimit()) return text.length
+        return text.toByteArray(Charsets.UTF_8).size
+    }
+
+    /** Rows the database would reject no matter how often they are retried. */
+    private fun isStorable(action: ActionType): Boolean {
+        val extra = action.extraData
+        val problem = when {
+            extra != null && utf8Length(extra) > extraDataLimit() -> "extra_data too large (${extra.length} chars)"
+
+            action.identifier.length > MAX_ACTION_NAME_LENGTH -> "action type name too long"
+
+            action.objectIdentifier.toString().length > MAX_IDENTIFIER_LENGTH ||
+                action.oldObjectIdentifier.toString().length > MAX_IDENTIFIER_LENGTH -> "identifier too long"
+
+            else -> null
+        } ?: return true
+        logWarn(
+            "Skipping action log: $problem for action ${action.identifier} at " +
+                "[${action.world} ${action.pos.x} ${action.pos.y} ${action.pos.z}] " +
+                "by ${action.sourceProfile?.name ?: action.sourceName}",
+        )
+        return false
+    }
+
+    private fun worldOf(action: ActionType): Identifier =
+        action.world ?: ViaLogium.server.overworld().dimension().identifier()
+
+    private fun sourceKey(action: ActionType): String = action.sourceName.take(MAX_SOURCE_NAME_LENGTH)
+
+    /** Lookup values of a batch that have no cached id yet. */
+    private class MissingKeys {
+        val actions = HashSet<String>()
+        val objects = HashSet<Identifier>()
+        val worlds = HashSet<Identifier>()
+        val sources = HashSet<String>()
+        val players = HashMap<UUID, String>()
+
+        fun isEmpty() = actions.isEmpty() && objects.isEmpty() && worlds.isEmpty() &&
+            sources.isEmpty() && players.isEmpty()
+
+        companion object {
+            fun of(actions: List<ActionType>): MissingKeys {
+                val missing = MissingKeys()
+                for (action in actions) {
+                    if (!cache.actionIdentifierKeys.containsKey(action.identifier)) missing.actions += action.identifier
+                    if (!cache.objectIdentifierKeys.containsKey(action.objectIdentifier)) {
+                        missing.objects += action.objectIdentifier
+                    }
+                    if (!cache.objectIdentifierKeys.containsKey(action.oldObjectIdentifier)) {
+                        missing.objects += action.oldObjectIdentifier
+                    }
+                    val world = worldOf(action)
+                    if (!cache.worldIdentifierKeys.containsKey(world)) missing.worlds += world
+                    val source = sourceKey(action)
+                    if (!cache.sourceKeys.containsKey(source)) missing.sources += source
+                    action.sourceProfile?.let { profile ->
+                        if (!cache.playerKeys.containsKey(profile.id())) {
+                            missing.players[profile.id()] = profile.name().take(MAX_PLAYER_NAME_LENGTH)
+                        }
+                    }
+                }
+                return missing
+            }
         }
-        oversized.forEach { action ->
-            logWarn(
-                "Skipping action log: extra_data too large (${action.extraData!!.length} chars) " +
-                    "for action ${action.identifier} at " +
-                    "[${action.world} ${action.pos.x} ${action.pos.y} ${action.pos.z}] " +
-                    "by ${action.sourceProfile?.name ?: action.sourceName}",
+    }
+
+    /** Ids created or found by [resolveKeys]; put into the cache only after the transaction committed. */
+    private class ResolvedKeys {
+        val actions = HashMap<String, Int>()
+        val objects = HashMap<Identifier, Int>()
+        val worlds = HashMap<Identifier, Int>()
+        val sources = HashMap<String, Int>()
+        val players = HashMap<UUID, Pair<String, Int>>()
+
+        fun applyToCache() {
+            actions.forEach { (key, id) -> cache.actionIdentifierKeys.forcePut(key, id) }
+            objects.forEach { (key, id) -> cache.objectIdentifierKeys.forcePut(key, id) }
+            worlds.forEach { (key, id) -> cache.worldIdentifierKeys.forcePut(key, id) }
+            sources.forEach { (key, id) -> cache.sourceKeys.forcePut(key, id) }
+            players.forEach { (uuid, value) ->
+                cache.playerKeys.forcePut(uuid, value.second)
+                cache.playernameKeys.forcePut(value.first, value.second)
+            }
+        }
+    }
+
+    // insertIgnore + select instead of insertAndGetId: with a shared database another server may
+    // insert the same name at the same moment, and that must not fail the batch.
+    private fun Transaction.resolveKeys(missing: MissingKeys): ResolvedKeys {
+        val resolved = ResolvedKeys()
+        missing.actions.forEach {
+            resolved.actions[it] = insertIgnoreAndGetId(
+                Tables.ActionIdentifiers,
+                Tables.ActionIdentifiers.actionIdentifier,
+                it,
             )
         }
-        if (safe.isEmpty()) return
-        Tables.Actions.batchInsert(safe, shouldReturnGeneratedValues = false) { action ->
-            this[Tables.Actions.actionIdentifier] = getOrCreateActionId(action.identifier)
+        missing.objects.forEach {
+            resolved.objects[it] =
+                insertIgnoreAndGetId(Tables.ObjectIdentifiers, Tables.ObjectIdentifiers.identifier, it.toString())
+        }
+        missing.worlds.forEach {
+            resolved.worlds[it] = insertIgnoreAndGetId(Tables.Worlds, Tables.Worlds.identifier, it.toString())
+        }
+        missing.sources.forEach {
+            resolved.sources[it] = insertIgnoreAndGetId(Tables.Sources, Tables.Sources.name, it)
+        }
+        missing.players.forEach { (uuid, name) ->
+            Tables.Players.insertIgnore {
+                it[playerId] = uuid
+                it[playerName] = name
+            }
+            val row = Tables.Players
+                .select(Tables.Players.id, Tables.Players.playerName)
+                .where { Tables.Players.playerId eq uuid }
+                .single()
+            resolved.players[uuid] = row[Tables.Players.playerName] to row[Tables.Players.id].value
+        }
+        return resolved
+    }
+
+    private fun <T : Any> insertIgnoreAndGetId(table: IntIdTable, column: Column<T>, value: T): Int {
+        table.insertIgnore { it[column] = value }
+        return table.select(table.id).where { column eq value }.single()[table.id].value
+    }
+
+    private fun Transaction.insertActions(actions: List<ActionType>) {
+        fun <K> idOf(map: BiMap<K, Int>, key: K): Int = map[key] ?: throw IllegalStateException("No cached id for $key")
+
+        Tables.Actions.batchInsert(actions, shouldReturnGeneratedValues = false) { action ->
+            this[Tables.Actions.actionIdentifier] = idOf(cache.actionIdentifierKeys, action.identifier)
             this[Tables.Actions.timestamp] = action.timestamp
             this[Tables.Actions.x] = action.pos.x
             this[Tables.Actions.y] = action.pos.y
             this[Tables.Actions.z] = action.pos.z
-            this[Tables.Actions.objectId] = getOrCreateRegistryKeyId(action.objectIdentifier)
-            this[Tables.Actions.oldObjectId] = getOrCreateRegistryKeyId(action.oldObjectIdentifier)
-            this[Tables.Actions.world] = getOrCreateWorldId(
-                action.world ?: ViaLogium.server.overworld().dimension()
-                    .identifier(),
-            )
+            this[Tables.Actions.objectId] = idOf(cache.objectIdentifierKeys, action.objectIdentifier)
+            this[Tables.Actions.oldObjectId] = idOf(cache.objectIdentifierKeys, action.oldObjectIdentifier)
+            this[Tables.Actions.world] = idOf(cache.worldIdentifierKeys, worldOf(action))
             this[Tables.Actions.blockState] = action.objectState
             this[Tables.Actions.oldBlockState] = action.oldObjectState
-            this[Tables.Actions.sourceName] = getOrCreateSourceId(action.sourceName)
-            this[Tables.Actions.sourcePlayer] = action.sourceProfile?.let { getOrCreatePlayerId(it.id) }
+            this[Tables.Actions.sourceName] = idOf(cache.sourceKeys, sourceKey(action))
+            this[Tables.Actions.sourcePlayer] = action.sourceProfile?.let { idOf(cache.playerKeys, it.id()) }
             this[Tables.Actions.extraData] = action.extraData
             this[Tables.Actions.server] = ServerIdentity.id
         }
     }
 
-    private fun Transaction.insertOrUpdatePlayer(uuid: UUID, name: String) {
-        val player = Tables.Player.find { Tables.Players.playerId eq uuid }.firstOrNull()
-
-        if (player != null) {
-            player.lastJoin = Instant.now()
-            player.playerName = name
-            cache.playernameKeys.forcePut(name, player.id.value)
-        } else {
-            val entity = Tables.Player.new {
-                this.playerId = uuid
-                this.playerName = name
-            }
-            cache.playerKeys[uuid] = entity.id.value
-            cache.playernameKeys.forcePut(name, entity.id.value)
+    private fun Transaction.upsertPlayer(uuid: UUID, name: String): Int {
+        val updated = Tables.Players.update({ Tables.Players.playerId eq uuid }) {
+            it[playerName] = name
+            it[lastJoin] = Instant.now()
         }
+        if (updated == 0) {
+            Tables.Players.insertIgnore {
+                it[playerId] = uuid
+                it[playerName] = name
+            }
+        }
+        return Tables.Players.select(
+            Tables.Players.id,
+        ).where { Tables.Players.playerId eq uuid }.single()[Tables.Players.id].value
     }
 
     private fun Transaction.selectActionsSearch(params: ActionSearchParams, page: Int): SearchResults {
-        val actions = mutableListOf<ActionType>()
+        val pageSize = config[SearchSpec.pageSize].coerceAtLeast(1)
+        val totalActions = countForPaging(params, page)
+        val totalPages = ceil(totalActions.toDouble() / pageSize.toDouble()).toInt()
+        if (totalActions == 0L || page > totalPages) return SearchResults(emptyList(), params, page, totalPages)
 
-        var query = Tables.Actions
+        // Offset paging: people stay on the first pages, and the count above is reused between them.
+        val query = Tables.Actions
             .selectAll()
-            .andWhere { buildQueryParams(params) }
+            .where(buildQueryParams(params))
+            .orderBy(Tables.Actions.id, SortOrder.DESC)
+            .limit(pageSize)
+            .offset((pageSize.toLong() * (page - 1)))
 
-        val totalActions: Long = countActions(params)
-        if (totalActions == 0L) return SearchResults(actions, params, page, 0)
+        return SearchResults(getActionsFromQuery(query), params, page, totalPages)
+    }
 
-        query = query.orderBy(Tables.Actions.id, SortOrder.DESC)
-        query = query.limit(config[SearchSpec.pageSize]).offset(
-            (config[SearchSpec.pageSize] * (page - 1)).toLong(),
-        ) // TODO better pagination without offset - probably doesn't matter as most people stay on first few pages
-
-        actions.addAll(getActionsFromQuery(query))
-
-        val totalPages = ceil(totalActions.toDouble() / config[SearchSpec.pageSize].toDouble()).toInt()
-
-        return SearchResults(actions, params, page, totalPages)
+    /**
+     * The first page always counts afresh; following pages of the same search reuse that count for
+     * a minute instead of scanning every matching row again on each `/vl page`.
+     */
+    private fun Transaction.countForPaging(params: ActionSearchParams, page: Int): Long {
+        val now = System.currentTimeMillis()
+        if (page > 1) {
+            countCache[params]?.takeIf { now - it.atMs < COUNT_CACHE_TTL_MS }?.let { return it.value }
+        }
+        val total = countActions(params)
+        if (countCache.size >= COUNT_CACHE_MAX_ENTRIES) countCache.clear()
+        countCache[params] = CachedCount(total, now)
+        return total
     }
 
     private fun Transaction.countActions(params: ActionSearchParams): Long = Tables.Actions
@@ -812,66 +1109,9 @@ object DatabaseManager {
             return cache[obj]
         }
         return table.find { column eq mapper.apply(obj) }.firstOrNull()?.id?.value?.also {
-            cache.put(obj, it)
+            cache.forcePut(obj, it)
         }
     }
-
-    private fun <T> getOrCreateObjectId(
-        obj: T,
-        cache: BiMap<T, Int>,
-        entity: IntEntityClass<*>,
-        table: IntIdTable,
-        column: Column<T>,
-    ): Int = getOrCreateObjectId(obj, Function.identity(), cache, entity, table, column)
-
-    private fun <T, S> getOrCreateObjectId(
-        obj: T,
-        mapper: Function<T, S>,
-        cache: BiMap<T, Int>,
-        entity: IntEntityClass<*>,
-        table: IntIdTable,
-        column: Column<S>,
-    ): Int {
-        getObjectId(obj, mapper, cache, entity, column)?.let { return it }
-
-        return entity[
-            table.insertAndGetId {
-                it[column] = mapper.apply(obj)
-            },
-        ].id.value.also { cache.put(obj!!, it) }
-    }
-
-    private fun getOrCreatePlayerId(playerId: UUID): Int =
-        getOrCreateObjectId(playerId, cache.playerKeys, Tables.Player, Tables.Players, Tables.Players.playerId)
-
-    private fun getOrCreateSourceId(source: String): Int =
-        getOrCreateObjectId(source, cache.sourceKeys, Tables.Source, Tables.Sources, Tables.Sources.name)
-
-    private fun getOrCreateActionId(actionTypeId: String): Int = getOrCreateObjectId(
-        actionTypeId,
-        cache.actionIdentifierKeys,
-        Tables.ActionIdentifier,
-        Tables.ActionIdentifiers,
-        Tables.ActionIdentifiers.actionIdentifier,
-    )
-
-    private fun getOrCreateRegistryKeyId(identifier: Identifier): Int = getOrCreateObjectId(
-        identifier,
-        Identifier::toString,
-        cache.objectIdentifierKeys,
-        Tables.ObjectIdentifier,
-        Tables.ObjectIdentifiers,
-        Tables.ObjectIdentifiers.identifier,
-    )
-
-    private fun getOrCreateWorldId(identifier: Identifier): Int = getOrCreateObjectId(
-        identifier,
-        Identifier::toString,
-        cache.worldIdentifierKeys,
-        Tables.World,
-        Tables.Worlds,
-        Tables.Worlds.identifier,
-    )
 
     private fun getPlayerId(playerId: UUID): Int? =
         getObjectId(playerId, cache.playerKeys, Tables.Player, Tables.Players.playerId)

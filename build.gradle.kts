@@ -74,8 +74,9 @@ dependencies {
     // Kotlin
     implementation(libs.fabric.kotlin)
 
-    // viaPanel API (optional at compile time, required at runtime via fabric.mod depends)
-    compileOnly(fileTree("../lib/mc26") { include("viapanel-*.jar") })
+    // viaPanel API (compile only; required at runtime via fabric.mod depends). Kept in libs/ so the
+    // repository builds on its own, CI included.
+    compileOnly(fileTree("libs") { include("viapanel-*.jar") })
 
     // Database
     includeImplementation(libs.exposed.core)

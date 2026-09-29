@@ -72,10 +72,9 @@ data class SearchC2SPacket(val args: String, val pages: Int) : CustomPacketPaylo
                 ViaLogium.searchCache[source.textName] = params
 
                 MessageUtils.warnBusy(source)
-                val results = DatabaseManager.searchActions(params, 1)
-
                 for (i in 1..requestedPages) {
-                    val page = DatabaseManager.searchActions(results.searchParams, i)
+                    val page = DatabaseManager.searchActions(params, i)
+                    if (page.actions.isEmpty()) break
                     MessageUtils.sendSearchResults(
                         source,
                         page,
@@ -83,6 +82,7 @@ data class SearchC2SPacket(val args: String, val pages: Int) : CustomPacketPaylo
                             "text.vialogium.header.search",
                         ).setStyle(TextColorPallet.primary),
                     )
+                    if (i >= page.pages) break
                 }
 
                 ResponseS2CPacket.sendResponse(

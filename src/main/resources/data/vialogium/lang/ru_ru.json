@@ -47,6 +47,7 @@
   "error.vialogium.unknown_param": "Неизвестный параметр %s",
   "error.vialogium.no_preview": "Нет текущего предварительного просмотра",
   "error.vialogium.other_server": "Откат и восстановление работают только на этом сервере (%s). Запустите их на сервере, где были действия",
+  "error.vialogium.rollback_in_progress": "Уже идёт откат или восстановление (%s). Дождитесь его окончания",
   "error.vialogium.unspecific.range": "Пожалуйста, укажите диапазон.",
   "error.vialogium.unspecific.range_to_big": "Максимальный диапазон: %s. Используйте @global, чтобы подтвердить запуск по всему серверу!",
   "error.vialogium.unspecific.source_or_time": "Пожалуйста, укажите источник или время (after).",
