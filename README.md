@@ -34,6 +34,8 @@ The divergence is substantial: at the 0.3.0 baseline the tree differed from upst
 
 ## Install
 
+Russian step-by-step guide (install, PostgreSQL/MariaDB/SQLite, network setup, troubleshooting): [docs/install_ru.md](docs/install_ru.md).
+
 - Put viaLogium in your `mods` folder together with Fabric API and `fabric-language-kotlin`.
 - viaPanel 3.1.0 or newer is required (panel config editing and the server name for shared databases).
 - On first run, config is generated at `config/vialogium.toml`.
@@ -74,7 +76,7 @@ username = "vialogium"
 password = "change_me"
 properties = {}
 maxPoolSize = 10
-connectionTimeout = 60000
+connectionTimeout = 10000
 maxLifetime = 1800000
 ```
 

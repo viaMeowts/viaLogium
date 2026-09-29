@@ -9,7 +9,7 @@ import com.viameowts.vialogium.network.packet.action.ActionS2CPacket
 import com.viameowts.vialogium.network.packet.response.ResponseCodes
 import com.viameowts.vialogium.network.packet.response.ResponseContent
 import com.viameowts.vialogium.network.packet.response.ResponseS2CPacket
-import com.viameowts.vialogium.utility.getInspectResults
+import com.viameowts.vialogium.utility.inspectParams
 import kotlinx.coroutines.launch
 import me.lucko.fabric.api.permissions.v0.Permissions
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
@@ -56,13 +56,14 @@ data class InspectC2SPacket(val pos: BlockPos, val pages: Int) : CustomPacketPay
             val maxRequestPages = ViaLogium.config[DatabaseSpec.networkMaxPages].coerceAtLeast(1)
             val requestedPages = payload.pages.coerceIn(1, maxRequestPages)
 
+            val params = player.inspectParams(payload.pos)
             ViaLogium.launch {
-                val results = player.getInspectResults(payload.pos)
                 for (i in 1..requestedPages) {
-                    val page = DatabaseManager.searchActions(results.searchParams, i)
+                    val page = DatabaseManager.searchActions(params, i)
                     page.actions.forEach { action ->
                         sender.sendPacket(ActionS2CPacket(action))
                     }
+                    if (i >= page.pages) break
                 }
                 ResponseS2CPacket.sendResponse(
                     ResponseContent(ViaLogiumPacketTypes.INSPECT_POS.id, ResponseCodes.COMPLETED.code),

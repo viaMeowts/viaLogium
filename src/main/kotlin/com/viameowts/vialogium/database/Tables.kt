@@ -10,7 +10,7 @@ import org.jetbrains.exposed.v1.javatime.timestamp
 import java.time.Instant
 
 private const val MAX_PLAYER_NAME_LENGTH = 16
-private const val MAX_ACTION_NAME_LENGTH = 16
+const val MAX_ACTION_NAME_LENGTH = 16
 private const val MAX_IDENTIFIER_LENGTH = 191
 private const val MAX_SOURCE_NAME_LENGTH = 30
 const val MAX_SERVER_ID_LENGTH = 32
@@ -69,11 +69,12 @@ object Tables {
         val sourcePlayer = optReference("player_id", Players.id).index()
         val extraData = text("extra_data").nullable()
         val rolledBack = bool("rolled_back").clientDefault { false }.index("actions_rolled_back_idx")
-        val server = varchar("server", MAX_SERVER_ID_LENGTH).default("").index("actions_server_idx")
+        val server = varchar("server", MAX_SERVER_ID_LENGTH).default("")
 
         init {
             index("actions_by_location", false, x, y, z, world)
-            index("actions_xyz_idx", false, x, y, z)
+            // Every query filters by server; purges and time-limited searches also by time.
+            index("actions_server_time_idx", false, server, timestamp)
         }
     }
 

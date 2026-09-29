@@ -3,6 +3,7 @@ package com.viameowts.vialogium.commands.subcommands
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.ActionSearchParams
 import com.viameowts.vialogium.actionutils.RollbackBlockTracker
+import com.viameowts.vialogium.actionutils.RollbackLock
 import com.viameowts.vialogium.commands.BuildableCommand
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
@@ -44,6 +45,7 @@ object RollbackCommand : BuildableCommand {
     fun rollback(context: Context, params: ActionSearchParams): Int {
         val source = context.source
         params.ensureSpecific()
+        val lock = RollbackLock.acquire(source) ?: return 0
         ViaLogium.launch {
             MessageUtils.warnBusy(source)
             val totalActions = DatabaseManager.countRollbackActions(params)
@@ -72,7 +74,8 @@ object RollbackCommand : BuildableCommand {
             // thread before the rollback loop.
             val containerBreakPositions = DatabaseManager.selectContainerBreakPositions(params)
 
-            context.source.level.launchMain {
+            lock.handOff(
+                context.source.level.launchMain {
                 val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
                 val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
                 val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
@@ -247,7 +250,8 @@ object RollbackCommand : BuildableCommand {
                     true,
                 )
             }
-        }
+            )
+        }.invokeOnCompletion { lock.releaseUnlessHandedOff() }
         return 1
     }
 }

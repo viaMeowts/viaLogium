@@ -2,6 +2,7 @@ package com.viameowts.vialogium.commands.subcommands
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.ActionSearchParams
+import com.viameowts.vialogium.actionutils.RollbackLock
 import com.viameowts.vialogium.commands.BuildableCommand
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
@@ -36,6 +37,7 @@ object RestoreCommand : BuildableCommand {
     fun restore(context: Context, params: ActionSearchParams): Int {
         val source = context.source
         params.ensureSpecific()
+        val lock = RollbackLock.acquire(source) ?: return 0
         ViaLogium.launch {
             MessageUtils.warnBusy(source)
             val totalActions = DatabaseManager.countRestoreActions(params)
@@ -59,7 +61,8 @@ object RestoreCommand : BuildableCommand {
                 true,
             )
 
-            context.source.level.launchMain {
+            lock.handOff(
+                context.source.level.launchMain {
                 val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
                 val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
                 val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
@@ -166,7 +169,8 @@ object RestoreCommand : BuildableCommand {
                     true,
                 )
             }
-        }
+            )
+        }.invokeOnCompletion { lock.releaseUnlessHandedOff() }
         return 1
     }
 }

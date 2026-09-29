@@ -8,9 +8,15 @@ import com.viameowts.vialogium.logInfo
 import com.viameowts.vialogium.logWarn
 import com.viameowts.vialogium.utility.Sources
 import com.viameowts.vialogium.utility.ticks
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.sql.SQLDataException
+import java.sql.SQLException
+import java.sql.SQLIntegrityConstraintViolationException
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -22,21 +28,32 @@ object ActionQueueService {
         EMERGENCY,
     }
 
-    private const val MAX_BATCH_RETRIES = 5
-    private const val RETRY_DELAY_MS = 5000L
+    private const val MIN_RETRY_DELAY_MS = 1_000L
+    private const val MAX_RETRY_DELAY_MS = 30_000L
+
+    // SQLite result codes for rows the database will never accept (TOOBIG, CONSTRAINT, MISMATCH).
+    private val SQLITE_DATA_ERRORS = setOf(18, 19, 20)
 
     private val queue = LinkedBlockingQueue<ActionType>()
-    private lateinit var job: Job
+
+    @Volatile
+    private var job: Job? = null
     private val droppedActions = AtomicLong(0)
     private val explosionSampleCounter = AtomicLong(0)
     private val dbHealthy = AtomicBoolean(true)
+
+    @Volatile
     private var loggingMode = LoggingMode.NORMAL
 
-    /** Batch held in memory after a failed DB write, retried before draining new actions. */
+    /**
+     * Batch held in memory after a failed DB write. It is retried before new actions are drained,
+     * so a database outage never loses it: the queue limits below cap memory instead.
+     */
+    @Volatile
     private var retryBatch: List<ActionType>? = null
     private var retryAttempts = 0
 
-    val size: Int get() = queue.size
+    val size: Int get() = queue.size + (retryBatch?.size ?: 0)
     val dropped: Long get() = droppedActions.get()
     val isCritical: Boolean get() = loggingMode != LoggingMode.NORMAL
     val mode: LoggingMode get() = loggingMode
@@ -45,8 +62,27 @@ object ActionQueueService {
     val healthy: Boolean get() = dbHealthy.get()
 
     fun start() {
+        if (job != null) return
         job = ViaLogium.launch {
-            prepareNextBatch()
+            while (isActive) {
+                val queueSize = queue.size
+                updateLoggingMode(queueSize)
+
+                val batchSize = getBatchSize(queueSize)
+                val batchDelay = getBatchDelay(queueSize)
+
+                if (retryBatch == null && queue.size < batchSize && batchDelay > 0) {
+                    delay(batchDelay.ticks)
+                }
+
+                if (retryBatch != null || queue.isNotEmpty()) {
+                    drainBatch(batchSize)
+                } else {
+                    // Idle: ensure at least one suspension point so an empty queue (especially with
+                    // batchDelay == 0) cannot turn this loop into a 100% CPU busy-spin.
+                    delay(1.ticks)
+                }
+            }
         }
     }
 
@@ -78,84 +114,130 @@ object ActionQueueService {
         return queue.offer(action)
     }
 
+    /**
+     * Writes everything that is left. The flush loop is stopped first and joined, so the two never
+     * drain concurrently and a batch it was writing is kept for the retry below instead of lost.
+     */
     suspend fun drainAll() {
-        job.cancel()
+        job?.cancelAndJoin()
+        job = null
+        val batchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(1)
+        var failuresInARow = 0
         while (queue.isNotEmpty() || retryBatch != null) {
-            try {
-                drainBatch(ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(1))
-            } catch (t: Throwable) {
-                logError("Shutdown drain: batch write failed, ${retryBatch?.size ?: 0} actions may be lost", t)
+            val before = size
+            drainBatch(batchSize, shuttingDown = true)
+            failuresInARow = if (size >= before) failuresInARow + 1 else 0
+            if (failuresInARow >= 3) {
+                logError("Shutdown drain: database keeps failing, $size queued actions are lost")
+                queue.clear()
                 retryBatch = null
-                retryAttempts = 0
+                return
             }
         }
     }
 
-    private suspend fun drainBatch(batchSize: Int) {
-        val pending = retryBatch
-        val batch = if (pending != null) {
-            pending
-        } else {
-            mutableListOf<ActionType>().also { queue.drainTo(it, batchSize) }
-        }
-
+    private suspend fun drainBatch(batchSize: Int, shuttingDown: Boolean = false) {
+        val batch = retryBatch ?: mutableListOf<ActionType>().also { queue.drainTo(it, batchSize) }
         if (batch.isEmpty()) return
+        retryBatch = batch
 
         try {
             DatabaseManager.logActionBatch(batch)
-            if (!dbHealthy.getAndSet(true)) {
-                logInfo("Database writes recovered; logging is healthy again (dropped total=${droppedActions.get()})")
-            }
-            retryBatch = null
-            retryAttempts = 0
+            onBatchWritten()
+        } catch (e: CancellationException) {
+            // Stopped mid-write (shutdown): the batch stays in retryBatch for drainAll.
+            throw e
         } catch (t: Throwable) {
-            // Hold the batch in memory and retry with a bounded budget so transient
-            // DB outages never kill the flush loop and never lose data silently.
             dbHealthy.set(false)
-            retryBatch = batch
-            retryAttempts++
-            if (retryAttempts >= MAX_BATCH_RETRIES) {
-                logError(
-                    "Dropping ${batch.size} actions after $MAX_BATCH_RETRIES failed DB attempts " +
-                        "(last error: ${t.message}); identifiers: ${batch.take(10).map { it.identifier }}",
-                    t,
-                )
-                droppedActions.addAndGet(batch.size.toLong())
+            if (isDataError(t)) {
+                // The database rejects some row of this batch. Retrying the same batch would fail
+                // forever, so write it in halves until the bad rows are isolated and dropped alone.
                 retryBatch = null
                 retryAttempts = 0
+                if (writeIsolatingBadRows(batch, t)) markHealthy()
             } else {
-                logWarn(
-                    "DB write failed (attempt $retryAttempts/$MAX_BATCH_RETRIES): ${t.message}; " +
-                        "${batch.size} actions held for retry",
-                    t,
-                )
-                delay(RETRY_DELAY_MS)
+                retryAttempts++
+                val backoff = (MIN_RETRY_DELAY_MS shl (retryAttempts - 1).coerceAtMost(5))
+                    .coerceAtMost(MAX_RETRY_DELAY_MS)
+                val message = "DB write failed (attempt $retryAttempts): ${t.message}; ${batch.size} actions held, " +
+                    "retrying in ${backoff}ms (queue=${queue.size})"
+                // Full stack trace once per outage, then one line per retry.
+                if (retryAttempts == 1) logWarn(message, t) else logWarn(message)
+                if (!shuttingDown) delay(backoff)
             }
         }
     }
 
-    private suspend fun prepareNextBatch() {
-        job = ViaLogium.launch {
-            while (true) {
-                val queueSize = queue.size
-                updateLoggingMode(queueSize)
-
-                val batchSize = getBatchSize(queueSize)
-                val batchDelay = getBatchDelay(queueSize)
-
-                if (queue.size < batchSize && batchDelay > 0) {
-                    delay(batchDelay.ticks)
-                }
-
-                if (queue.isNotEmpty()) {
-                    drainBatch(batchSize)
+    /** Returns false when the database became unreachable; the unwritten rest is then in retryBatch. */
+    private suspend fun writeIsolatingBadRows(batch: List<ActionType>, cause: Throwable): Boolean {
+        if (batch.size == 1) {
+            val action = batch.single()
+            droppedActions.incrementAndGet()
+            logError(
+                "Dropping action the database rejects: ${action.identifier} at " +
+                    "[${action.world} ${action.pos.x} ${action.pos.y} ${action.pos.z}] " +
+                    "by ${action.sourceProfile?.name ?: action.sourceName}: ${cause.message}",
+            )
+            return true
+        }
+        val half = batch.size / 2
+        val parts = listOf(batch.subList(0, half), batch.subList(half, batch.size))
+        for ((index, part) in parts.withIndex()) {
+            val written = try {
+                DatabaseManager.logActionBatch(part)
+                true
+            } catch (e: CancellationException) {
+                retryBatch = retryBatch.orEmpty() + parts.drop(index).flatten()
+                throw e
+            } catch (t: Throwable) {
+                if (isDataError(t)) {
+                    writeIsolatingBadRows(part, t)
                 } else {
-                    // Idle: ensure at least one suspension point so an empty queue (especially with
-                    // batchDelay == 0) cannot turn this loop into a 100% CPU busy-spin.
-                    delay(1.ticks)
+                    // The database went away while isolating: hold the rest for the normal retry.
+                    retryBatch = retryBatch.orEmpty() + part
+                    false
                 }
             }
+            if (!written) {
+                retryBatch = retryBatch.orEmpty() + parts.drop(index + 1).flatten()
+                return false
+            }
         }
+        return true
+    }
+
+    private fun onBatchWritten() {
+        retryBatch = null
+        retryAttempts = 0
+        markHealthy()
+    }
+
+    private fun markHealthy() {
+        if (!dbHealthy.getAndSet(true)) {
+            logInfo("Database writes recovered; logging is healthy again (dropped total=${droppedActions.get()})")
+        }
+    }
+
+    /** True when the database refused the data itself, as opposed to being unreachable or busy. */
+    private fun isDataError(t: Throwable): Boolean {
+        var current: Throwable? = t
+        while (current != null) {
+            when (current) {
+                is SQLDataException, is SQLIntegrityConstraintViolationException -> return true
+
+                is SQLException -> {
+                    val state = current.sqlState
+                    if (state != null && (state.startsWith("22") || state.startsWith("23"))) return true
+                    if (current.javaClass.name.startsWith("org.sqlite") && current.errorCode in SQLITE_DATA_ERRORS) {
+                        return true
+                    }
+                }
+
+                is IllegalArgumentException, is IllegalStateException -> return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     private fun getBatchSize(queueSize: Int): Int {

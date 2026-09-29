@@ -25,8 +25,7 @@ class McExecutor(val executor: (Runnable) -> Unit) : AbstractCoroutineContextEle
 fun launchMain(executor: (Runnable) -> Unit, block: suspend CoroutineScope.() -> Unit): Job =
     ViaLogium.launch(McDispatcher + McExecutor(executor), block = block)
 
-fun Level.launchMain(block: suspend CoroutineScope.() -> Unit) {
-    when (this) {
-        is ServerLevel -> launchMain(server::execute, block)
-    }
+fun Level.launchMain(block: suspend CoroutineScope.() -> Unit): Job? = when (this) {
+    is ServerLevel -> launchMain(server::execute, block)
+    else -> null
 }

@@ -46,6 +46,7 @@
     "error.vialogium.unknown_param": "Невідомий параметр %s",
     "error.vialogium.no_preview": "Немає поточного попереднього перегляду",
     "error.vialogium.other_server": "Відкат і відновлення працюють лише на цьому сервері (%s). Запустіть їх на сервері, де були дії",
+    "error.vialogium.rollback_in_progress": "A rollback or restore is already running (%s). Wait until it finishes",
     "error.vialogium.unspecific.range": "Будь ласка, вкажіть діапазон.",
     "error.vialogium.unspecific.range_to_big": "Максимальний діапазон становить %s.",
     "error.vialogium.unspecific.source_or_time": "Будь ласка, вкажіть джерело або час (після).",

@@ -23,11 +23,14 @@ import com.viameowts.vialogium.network.packet.handshake.HandshakeS2CPacket
 import com.viameowts.vialogium.network.packet.response.ResponseS2CPacket
 import com.viameowts.vialogium.registry.ActionRegistry
 import com.viameowts.viapanel.api.ViaPanelApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,6 +50,7 @@ import java.nio.file.StandardCopyOption
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import com.viameowts.vialogium.config.config as realConfig
@@ -62,6 +66,13 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
     lateinit var config: Config
     lateinit var server: MinecraftServer
     val searchCache = ConcurrentHashMap<String, ActionSearchParams>()
+    private var purgeJob: Job? = null
+
+    @Volatile
+    private var databaseReady = false
+
+    @Volatile
+    private var stopping = false
 
     @JvmField // Required for mixin access
     val previewCache = ConcurrentHashMap<UUID, Preview>()
@@ -97,6 +108,8 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
         // Drain on STOPPING (worlds still loaded) rather than STOPPED, where overworld() may be
         // gone and the save-state guard in DatabaseManager.execute would stall the drain.
         ServerLifecycleEvents.SERVER_STOPPING.register(::serverStopping)
+        ServerLifecycleEvents.SERVER_STARTED.register { DatabaseManager.serverStarted = true }
+        ServerLifecycleEvents.SERVER_STOPPED.register { DatabaseManager.close() }
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ -> registerCommands(dispatcher) }
         PayloadTypeRegistry.clientboundPlay().register(ActionS2CPacket.ID, ActionS2CPacket.CODEC)
         PayloadTypeRegistry.clientboundPlay().register(HandshakeS2CPacket.ID, HandshakeS2CPacket.CODEC)
@@ -110,6 +123,7 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
             val dataSource = ExtensionManager.getDataSource() ?: ViaLogiumDatabaseProvider.getDataSource()
             DatabaseManager.setup(dataSource)
             DatabaseManager.ensureTables()
+            databaseReady = true
         } catch (t: Throwable) {
             logFatal("Unable to initialize database. viaLogium will not start.")
             throw IllegalStateException("Database startup failed", t)
@@ -130,9 +144,27 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
             logInfo("Registry insert complete")
 
             DatabaseManager.setupCache()
-            DatabaseManager.autoPurge()
         }.invokeOnCompletion {
+            if (stopping) return@invokeOnCompletion
             ActionQueueService.start()
+            startAutoPurge()
+        }
+    }
+
+    // Runs at startup and then every autoPurgeIntervalHours, so a server that stays up for weeks
+    // still trims its history instead of only on restart.
+    private fun startAutoPurge() {
+        purgeJob = ViaLogium.launch {
+            while (isActive) {
+                try {
+                    DatabaseManager.autoPurge()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    logWarn("Auto-purge failed, retrying next interval", t)
+                }
+                delay(config[DatabaseSpec.autoPurgeIntervalHours].coerceAtLeast(1).hours)
+            }
         }
     }
 
@@ -140,26 +172,30 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
         // Let queued writes through even if saving is disabled during shutdown, so the drain can
         // actually complete instead of spinning on the save-state guard until the timeout.
         DatabaseManager.bypassSaveStateWait = true
+        stopping = true
+        purgeJob?.cancel()
+        if (!databaseReady) return
         runBlocking {
+            val progress = launch {
+                while (true) {
+                    delay(config[DatabaseSpec.queueCheckDelaySec].coerceAtLeast(1).seconds)
+                    logInfo(
+                        "Database is still busy. If you exit now data WILL be lost. " +
+                            "Actions in queue: ${ActionQueueService.size}",
+                    )
+                }
+            }
             try {
                 withTimeout(config[DatabaseSpec.queueTimeoutMin].minutes) {
-                    ViaLogium.launch {
-                        while (ActionQueueService.size > 0) {
-                            logInfo(
-                                "Database is still busy. If you exit now data WILL be lost. " +
-                                    "Actions in queue: ${ActionQueueService.size}",
-                            )
-
-                            delay(config[DatabaseSpec.queueCheckDelaySec].seconds)
-                        }
-                    }
                     ActionQueueService.drainAll()
-                    logInfo("Successfully drained database queue")
                 }
+                logInfo("Successfully drained database queue")
             } catch (e: TimeoutCancellationException) {
                 logWarn(
                     "Database drain timed out. ${ActionQueueService.size} actions still in queue. Data may be lost.",
                 )
+            } finally {
+                progress.cancel()
             }
         }
     }

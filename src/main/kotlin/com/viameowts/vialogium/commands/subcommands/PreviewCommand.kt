@@ -11,11 +11,14 @@ import com.viameowts.vialogium.database.DatabaseManager
 import com.viameowts.vialogium.logInfo
 import com.viameowts.vialogium.utility.Context
 import com.viameowts.vialogium.utility.LiteralNode
+import com.viameowts.vialogium.utility.McDispatcher
+import com.viameowts.vialogium.utility.McExecutor
 import com.viameowts.vialogium.utility.MessageUtils
 import com.viameowts.vialogium.utility.TextColorPallet
 import com.viameowts.vialogium.utility.ticks
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.lucko.fabric.api.permissions.v0.Permissions
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
@@ -76,6 +79,7 @@ object PreviewCommand : BuildableCommand {
             ViaLogium.previewCache[player.uuid]?.cancel(player)
 
             val preview = Preview(params, totalActions, player, type)
+            val mainThread = McDispatcher + McExecutor(player.level().server::execute)
             val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
             val actionsPerTick = ViaLogium.config[DatabaseSpec.previewActionsPerTick].coerceAtLeast(1)
             var actionsSinceYield = 0
@@ -95,7 +99,8 @@ object PreviewCommand : BuildableCommand {
                         val batch = DatabaseManager.selectRollbackPreviewBatch(params, cursorId, selectBatchSize)
                         if (batch.isEmpty()) break
 
-                        preview.addActions(batch, player)
+                        // Previews read block entities and entity trackers: do it on the server thread.
+                        withContext(mainThread) { preview.addActions(batch, player) }
                         processed += batch.size
                         cursorId = batch.last().id
 
@@ -124,7 +129,8 @@ object PreviewCommand : BuildableCommand {
                         val batch = DatabaseManager.selectRestorePreviewBatch(params, cursorId, selectBatchSize)
                         if (batch.isEmpty()) break
 
-                        preview.addActions(batch, player)
+                        // Previews read block entities and entity trackers: do it on the server thread.
+                        withContext(mainThread) { preview.addActions(batch, player) }
                         processed += batch.size
                         cursorId = batch.last().id
 

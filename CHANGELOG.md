@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.0 (database hardening)
+
+### Fixed
+- A failed batch could leave rolled-back ids for new players/sources/worlds in the cache; every later batch then failed with a foreign key error until restart. New ids are now created in their own committed step and cached only after it.
+- Actions from players that never joined this server (another backend, fake players) failed the whole batch: the player row was inserted without a name.
+- One row the database rejects (too long, constraint) no longer drops the whole batch after retries: the batch is split until only that row is dropped.
+- A database outage longer than ~25 s dropped the held batch. Writes are now retried with backoff (up to 30 s) until the database is back; the queue limits still cap memory.
+- Shutdown: the flush loop and the shutdown drain could write at the same time and lose the batch that was in flight; stopping before the queue started crashed on an uninitialized job. The connection pool is now closed on stop.
+- Inspect (click and client-mod packet) and previews read the world from a background thread; they now read it on the server thread.
+- Two rollbacks/restores could run at once over the same area. Now one at a time per server.
+- MySQL could not start when upgrading a pre-1.1.0 database (`CREATE INDEX IF NOT EXISTS` is not MySQL syntax).
+- Search results with an identifier added by another server after the last cache reload crashed the search.
+- False "save-off is active" warnings while the server was starting.
+
+### Changed
+- Reads (search, inspect, previews, status) run on their own threads beside the single writer, so an inspect click no longer waits behind a 25 000-row batch insert.
+- `/save-off` pauses only SQLite/H2 writes (files in the world folder). PostgreSQL/MySQL/MariaDB keep writing, and searches never pause.
+- `/vl page` reuses the result count of the search for a minute instead of counting all matching rows again.
+- Purges (manual and auto) delete in chunks of 5000 rows, and auto-purge also runs every `autoPurgeIntervalHours` (default 24), not only at startup.
+- Indexes: new `actions_server_time_idx (server, time)`; redundant `actions_xyz_idx` and `actions_server_idx` are dropped on startup (they slowed every insert).
+- `extra_data` over 64 KiB is only refused on MySQL/MariaDB; PostgreSQL, SQLite and H2 store it.
+- `/vl status` shows an estimated row count (`~`) on PostgreSQL/MySQL instead of a full `COUNT(*)`.
+- Connection pool: named per server, keepalive, `connectionTimeout` default 10 s; PostgreSQL connections show `viaLogium-<server>` in `pg_stat_activity`. `url` may include the `jdbc:` prefix.
+- `username`/`password` accept `env:VARIABLE` and `file:/path`, so the password does not have to live in `vialogium.toml`.
+
+### Docs
+- Russian install and database guide: `docs/install_ru.md`.
+
 ## 1.1.0 (Minecraft 26.3, shared database)
 
 ### Added

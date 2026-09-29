@@ -2,6 +2,7 @@ package com.viameowts.vialogium.network.packet.receiver
 
 import com.viameowts.vialogium.ViaLogium
 import com.viameowts.vialogium.actionutils.RollbackBlockTracker
+import com.viameowts.vialogium.actionutils.RollbackLock
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
 import com.viameowts.vialogium.config.DatabaseSpec
@@ -61,6 +62,14 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                 return
             }
 
+            val lock = RollbackLock.acquire(player.name.string) ?: run {
+                ResponseS2CPacket.sendResponse(
+                    ResponseContent(ViaLogiumPacketTypes.ROLLBACK.id, ResponseCodes.ERROR.code),
+                    sender,
+                )
+                return
+            }
+
             ResponseS2CPacket.sendResponse(
                 ResponseContent(ViaLogiumPacketTypes.ROLLBACK.id, ResponseCodes.EXECUTING.code),
                 sender,
@@ -80,7 +89,8 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                 // of their spilled contents are skipped during rollback.
                 val containerBreakPositions = DatabaseManager.selectContainerBreakPositions(params)
 
-                player.level().launchMain {
+                lock.handOff(
+                    player.level().launchMain {
                     val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
                     val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
                     val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
@@ -168,7 +178,8 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                         sender,
                     )
                 }
-            }
+                )
+            }.invokeOnCompletion { lock.releaseUnlessHandedOff() }
         }
     }
 }

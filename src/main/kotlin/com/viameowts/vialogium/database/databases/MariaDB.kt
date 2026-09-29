@@ -1,40 +1,31 @@
 package com.viameowts.vialogium.database.databases
 
-import com.viameowts.vialogium.config.config
-import com.viameowts.vialogium.database.DatabaseExtensionSpec
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import net.minecraft.resources.Identifier
 import java.nio.file.Path
 import javax.sql.DataSource
 
 object MariaDB : ViaLogiumDatabase {
-    override fun getDataSource(savePath: Path): DataSource = HikariDataSource(
-        HikariConfig().apply {
-            jdbcUrl = "jdbc:mariadb://${config[DatabaseExtensionSpec.url]}"
-            username = config[DatabaseExtensionSpec.userName]
-            password = config[DatabaseExtensionSpec.password]
-            maximumPoolSize = config[DatabaseExtensionSpec.maxPoolSize]
-            connectionTimeout = config[DatabaseExtensionSpec.connectionTimeout]
-            maxLifetime = config[DatabaseExtensionSpec.maxLifetime]
-            addDataSourceProperty("rewriteBatchedStatements", "true")
-            addDataSourceProperty("cachePrepStmts", true)
-            addDataSourceProperty("prepStmtCacheSize", 250)
-            addDataSourceProperty("prepStmtCacheSqlLimit", 2048)
-            addDataSourceProperty("useServerPrepStmts", true)
-            addDataSourceProperty("cacheCallableStmts", true)
-            addDataSourceProperty("cacheResultSetMetadata", true)
-            addDataSourceProperty("cacheServerConfiguration", true)
-            addDataSourceProperty("useLocalSessionState", true)
-            addDataSourceProperty("elideSetAutoCommits", true)
-            addDataSourceProperty("alwaysSendSetIsolation", false)
-            addDataSourceProperty("useJDBCCompliantTimezoneShift", true)
-            addDataSourceProperty("useLegacyDatetimeCode", false)
-            addDataSourceProperty("serverTimezone", "UTC")
-            for ((key, value) in config[DatabaseExtensionSpec.properties]) {
-                addDataSourceProperty(key, value)
-            }
-        },
+    override fun getDataSource(savePath: Path): DataSource = hikariDataSource(
+        "jdbc:mariadb://",
+        mapOf(
+            // Connector/J 3 batches through bulk statements; rewriteBatchedStatements is a MySQL
+            // driver option. The rest is the set used before 1.2.0 (stored timestamps rely on it).
+            "useBulkStmts" to "true",
+            "rewriteBatchedStatements" to "true",
+            "cachePrepStmts" to "true",
+            "prepStmtCacheSize" to "250",
+            "prepStmtCacheSqlLimit" to "2048",
+            "useServerPrepStmts" to "true",
+            "cacheCallableStmts" to "true",
+            "cacheResultSetMetadata" to "true",
+            "cacheServerConfiguration" to "true",
+            "useLocalSessionState" to "true",
+            "elideSetAutoCommits" to "true",
+            "alwaysSendSetIsolation" to "false",
+            "useJDBCCompliantTimezoneShift" to "true",
+            "useLegacyDatetimeCode" to "false",
+            "serverTimezone" to "UTC",
+        ),
     )
 
     override fun getDatabaseIdentifier() = Identifier.fromNamespaceAndPath("vialogium", "mariadb")
