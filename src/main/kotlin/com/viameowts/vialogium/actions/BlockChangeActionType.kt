@@ -82,6 +82,7 @@ open class BlockChangeActionType : AbstractActionType() {
         blockEntity.setChanged()
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     override fun rollback(server: MinecraftServer): Boolean {
         val world = server.getWorld(world) ?: return false
         val oldState = oldBlockState(world.holderLookup(Registries.BLOCK))
@@ -200,6 +201,7 @@ open class BlockChangeActionType : AbstractActionType() {
         return if (any) result else null
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     private fun loadSign(state: BlockState, tag: CompoundTag, server: MinecraftServer): SignBlockEntity? {
         if (!state.hasBlockEntity()) return null
         return try {

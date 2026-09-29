@@ -27,6 +27,9 @@ detekt = "2.0.0-alpha.2"
 [libraries]
 minecraft = { module = "net.minecraft:minecraft", version.ref = "minecraft" }
 fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
+fabric-loader-junit = { module = "net.fabricmc:fabric-loader-junit", version.ref = "fabric-loader" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version = "5.13.4" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version = "1.13.4" }
 
 fabric-api = { module = "net.fabricmc.fabric-api:fabric-api", version.ref = "fabric-api" }
 fabric-kotlin = { module = "net.fabricmc:fabric-language-kotlin", version.ref = "fabric-kotlin" }

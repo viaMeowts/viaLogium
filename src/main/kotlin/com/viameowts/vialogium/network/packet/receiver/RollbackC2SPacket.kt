@@ -1,8 +1,12 @@
 package com.viameowts.vialogium.network.packet.receiver
 
 import com.viameowts.vialogium.ViaLogium
+import com.viameowts.vialogium.actionutils.MIN_SELECT_BATCH_SIZE
+import com.viameowts.vialogium.actionutils.MIN_UPDATE_BATCH_SIZE
+import com.viameowts.vialogium.actionutils.PROGRESS_LOG_INTERVAL_MS
 import com.viameowts.vialogium.actionutils.RollbackBlockTracker
 import com.viameowts.vialogium.actionutils.RollbackLock
+import com.viameowts.vialogium.actionutils.actionsPerSecond
 import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.arguments.SearchParamArgument
 import com.viameowts.vialogium.config.DatabaseSpec
@@ -91,8 +95,12 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
 
                 lock.handOff(
                     player.level().launchMain {
-                        val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(500)
-                        val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(250)
+                        val selectBatchSize = ViaLogium.config[DatabaseSpec.emergencyBatchSize].coerceAtLeast(
+                            MIN_SELECT_BATCH_SIZE,
+                        )
+                        val updateBatchSize = ViaLogium.config[DatabaseSpec.batchSize].coerceAtLeast(
+                            MIN_UPDATE_BATCH_SIZE,
+                        )
                         val actionsPerTick = ViaLogium.config[DatabaseSpec.rollbackActionsPerTick].coerceAtLeast(1)
                         val server = player.level().server
                         var processed = 0L
@@ -106,7 +114,8 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
 
                         logInfo(
                             "rollback_sla stage=start source=${player.name.string} mode=network total=$totalActions " +
-                                "selectBatch=$selectBatchSize updateBatch=$updateBatchSize actionsPerTick=$actionsPerTick",
+                                "selectBatch=$selectBatchSize updateBatch=$updateBatchSize " +
+                                "actionsPerTick=$actionsPerTick",
                         )
 
                         while (true) {
@@ -154,12 +163,13 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                             processed += actions.size
                             cursorId = actions.last().id
                             val now = System.currentTimeMillis()
-                            if (now - lastProgressLogMs >= 30_000L) {
+                            if (now - lastProgressLogMs >= PROGRESS_LOG_INTERVAL_MS) {
                                 lastProgressLogMs = now
                                 val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
-                                val aps = (processed * 1000L) / elapsedMs
+                                val aps = actionsPerSecond(processed, elapsedMs)
                                 logInfo(
-                                    "rollback_sla stage=progress source=${player.name.string} mode=network processed=$processed " +
+                                    "rollback_sla stage=progress source=${player.name.string} mode=network " +
+                                        "processed=$processed " +
                                         "total=$totalActions elapsedMs=$elapsedMs actionsPerSec=$aps",
                                 )
                             }
@@ -167,9 +177,10 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                         }
 
                         val durationMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(1L)
-                        val actionsPerSec = (processed * 1000L) / durationMs
+                        val actionsPerSec = actionsPerSecond(processed, durationMs)
                         logInfo(
-                            "rollback_sla stage=done source=${player.name.string} mode=network processed=$processed total=$totalActions " +
+                            "rollback_sla stage=done source=${player.name.string} mode=network " +
+                                "processed=$processed total=$totalActions " +
                                 "durationMs=$durationMs actionsPerSec=$actionsPerSec",
                         )
 

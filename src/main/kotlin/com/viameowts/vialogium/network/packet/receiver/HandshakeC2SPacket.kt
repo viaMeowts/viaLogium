@@ -70,7 +70,8 @@ data class HandshakeC2SPacket(val nbt: CompoundTag?) : CustomPacketPayload {
                     )
                     logInfo(
                         "${player.name.string} joined the server with a ViaLogium compatible client mod, " +
-                            "but has a mismatched protocol: ViaLogium protocol version: ${Networking.PROTOCOL_VERSION}" +
+                            "but has a mismatched protocol: " +
+                            "ViaLogium protocol version: ${Networking.PROTOCOL_VERSION}" +
                             ", Client mod protocol version ${info.get().protocolVersion}",
                     )
                 }

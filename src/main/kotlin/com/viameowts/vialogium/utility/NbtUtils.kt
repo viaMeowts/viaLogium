@@ -75,6 +75,7 @@ object NbtUtils {
         }
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     fun BlockEntity.createNbt(registries: HolderLookup.Provider): CompoundTag = try {
         ProblemReporter.ScopedCollector(this.problemPath(), LOGGER)
             .use {
@@ -87,6 +88,7 @@ object NbtUtils {
         this.saveWithoutMetadata(registries) ?: CompoundTag()
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     fun Entity.createNbt(): CompoundTag = try {
         ProblemReporter.ScopedCollector(this.problemPath(), LOGGER)
             .use {
@@ -102,6 +104,7 @@ object NbtUtils {
         fallback
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     fun ItemStack.createNbt(registries: HolderLookup.Provider): CompoundTag = try {
         ProblemReporter.ScopedCollector({ "vialogium:itemstack@${this.item}" }, LOGGER)
             .use {

@@ -7,6 +7,7 @@ import javax.sql.DataSource
 object MariaDB : ViaLogiumDatabase {
     override fun getDataSource(savePath: Path): DataSource = hikariDataSource(
         "jdbc:mariadb://",
+        "org.mariadb.jdbc.Driver",
         mapOf(
             // Connector/J 3 batches through bulk statements; rewriteBatchedStatements is a MySQL
             // driver option. The rest is the set used before 1.2.0 (stored timestamps rely on it).

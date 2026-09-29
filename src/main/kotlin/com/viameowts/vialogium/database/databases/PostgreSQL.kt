@@ -8,6 +8,7 @@ import javax.sql.DataSource
 object PostgreSQL : ViaLogiumDatabase {
     override fun getDataSource(savePath: Path): DataSource = hikariDataSource(
         "jdbc:postgresql://",
+        "org.postgresql.Driver",
         mapOf(
             "reWriteBatchedInserts" to "true",
             // Shows which backend a connection belongs to in pg_stat_activity.

@@ -30,9 +30,19 @@ object ActionQueueService {
 
     private const val MIN_RETRY_DELAY_MS = 1_000L
     private const val MAX_RETRY_DELAY_MS = 30_000L
+    private const val MAX_BACKOFF_DOUBLINGS = 5
+    private const val MAX_SHUTDOWN_DRAIN_FAILURES = 3
+
+    /** A dropped-actions warning is logged once per this many drops. */
+    private const val DROP_LOG_EVERY = 5_000L
 
     // SQLite result codes for rows the database will never accept (TOOBIG, CONSTRAINT, MISMATCH).
+    @Suppress("MagicNumber")
     private val SQLITE_DATA_ERRORS = setOf(18, 19, 20)
+
+    // MySQL reports a failed CHECK (3819) and an unconvertible value (1366) with the generic HY000 state.
+    @Suppress("MagicNumber")
+    private val MYSQL_DATA_ERRORS = setOf(1366, 3819)
 
     private val queue = LinkedBlockingQueue<ActionType>()
 
@@ -97,7 +107,7 @@ object ActionQueueService {
 
         if (queueSize >= maxQueueSize) {
             val droppedNow = droppedActions.incrementAndGet()
-            if (droppedNow % 5000L == 1L) {
+            if (droppedNow % DROP_LOG_EVERY == 1L) {
                 logWarn("Dropping actions: queue hard limit reached ($queueSize/$maxQueueSize), dropped=$droppedNow")
             }
             return false
@@ -105,7 +115,7 @@ object ActionQueueService {
 
         if (shouldDropByCurrentMode(action, queueSize)) {
             val droppedNow = droppedActions.incrementAndGet()
-            if (droppedNow % 5000L == 1L) {
+            if (droppedNow % DROP_LOG_EVERY == 1L) {
                 logWarn("$loggingMode drop active: queue=$queueSize, dropped=$droppedNow")
             }
             return false
@@ -127,7 +137,7 @@ object ActionQueueService {
             val before = size
             drainBatch(batchSize, shuttingDown = true)
             failuresInARow = if (size >= before) failuresInARow + 1 else 0
-            if (failuresInARow >= 3) {
+            if (failuresInARow >= MAX_SHUTDOWN_DRAIN_FAILURES) {
                 logError("Shutdown drain: database keeps failing, $size queued actions are lost")
                 queue.clear()
                 retryBatch = null
@@ -136,6 +146,7 @@ object ActionQueueService {
         }
     }
 
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     private suspend fun drainBatch(batchSize: Int, shuttingDown: Boolean = false) {
         val batch = retryBatch ?: mutableListOf<ActionType>().also { queue.drainTo(it, batchSize) }
         if (batch.isEmpty()) return
@@ -157,7 +168,7 @@ object ActionQueueService {
                 if (writeIsolatingBadRows(batch, t)) markHealthy()
             } else {
                 retryAttempts++
-                val backoff = (MIN_RETRY_DELAY_MS shl (retryAttempts - 1).coerceAtMost(5))
+                val backoff = (MIN_RETRY_DELAY_MS shl (retryAttempts - 1).coerceAtMost(MAX_BACKOFF_DOUBLINGS))
                     .coerceAtMost(MAX_RETRY_DELAY_MS)
                 val message = "DB write failed (attempt $retryAttempts): ${t.message}; ${batch.size} actions held, " +
                     "retrying in ${backoff}ms (queue=${queue.size})"
@@ -169,6 +180,7 @@ object ActionQueueService {
     }
 
     /** Returns false when the database became unreachable; the unwritten rest is then in retryBatch. */
+    @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down
     private suspend fun writeIsolatingBadRows(batch: List<ActionType>, cause: Throwable): Boolean {
         if (batch.size == 1) {
             val action = batch.single()
@@ -229,6 +241,9 @@ object ActionQueueService {
                     val state = current.sqlState
                     if (state != null && (state.startsWith("22") || state.startsWith("23"))) return true
                     if (current.javaClass.name.startsWith("org.sqlite") && current.errorCode in SQLITE_DATA_ERRORS) {
+                        return true
+                    }
+                    if (current.javaClass.name.startsWith("com.mysql") && current.errorCode in MYSQL_DATA_ERRORS) {
                         return true
                     }
                 }

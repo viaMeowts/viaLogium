@@ -12,6 +12,8 @@ import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
 import java.util.concurrent.CompletableFuture
 
+private const val COORDINATE_COUNT = 3
+
 /**
  * Parses an exact block position written as `x,y,z` (integers, comma-separated), used for a
  * point/single-block rollback or search (e.g. `at:100,64,-258`).
@@ -24,7 +26,7 @@ class PositionParameter : SimpleParameter<BlockPos>() {
         }
         val arg = stringReader.string.substring(start, stringReader.cursor)
         val parts = arg.split(",")
-        if (parts.size != 3) {
+        if (parts.size != COORDINATE_COUNT) {
             throw SimpleCommandExceptionType(LiteralMessage("Expected coordinates as x,y,z")).create()
         }
         return try {
