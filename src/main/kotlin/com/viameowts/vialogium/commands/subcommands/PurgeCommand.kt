@@ -11,6 +11,7 @@ import com.viameowts.vialogium.config.config
 import com.viameowts.vialogium.database.DatabaseManager
 import com.viameowts.vialogium.utility.Context
 import com.viameowts.vialogium.utility.LiteralNode
+import com.viameowts.vialogium.utility.MeridianaAudit
 import com.viameowts.vialogium.utility.TextColorPallet
 import com.viameowts.vialogium.utility.literal
 import kotlinx.coroutines.launch
@@ -101,7 +102,12 @@ object PurgeCommand : BuildableCommand {
             true,
         )
         ViaLogium.launch {
-            DatabaseManager.purgeActions(pending.params)
+            val removed = DatabaseManager.purgeActions(pending.params)
+            MeridianaAudit.event(
+                source.textName,
+                "WARN",
+                "/vl purge: безвозвратно удалено записей из базы: $removed",
+            )
             source.sendSuccess(
                 { Component.translatable("text.vialogium.purge.complete").setStyle(TextColorPallet.secondary) },
                 true,

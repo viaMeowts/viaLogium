@@ -17,6 +17,7 @@ import com.viameowts.vialogium.network.packet.ViaLogiumPacketTypes
 import com.viameowts.vialogium.network.packet.response.ResponseCodes
 import com.viameowts.vialogium.network.packet.response.ResponseContent
 import com.viameowts.vialogium.network.packet.response.ResponseS2CPacket
+import com.viameowts.vialogium.utility.MeridianaAudit
 import com.viameowts.vialogium.utility.launchMain
 import com.viameowts.vialogium.utility.ticks
 import kotlinx.coroutines.Job
@@ -182,6 +183,11 @@ data class RollbackC2SPacket(val input: String) : CustomPacketPayload {
                             "rollback_sla stage=done source=${player.name.string} mode=network " +
                                 "processed=$processed total=$totalActions " +
                                 "durationMs=$durationMs actionsPerSec=$actionsPerSec",
+                        )
+                        MeridianaAudit.event(
+                            player.name.string,
+                            "WARN",
+                            "откат из клиентского мода: откачено $processed из $totalActions действий, $durationMs мс",
                         )
 
                         ResponseS2CPacket.sendResponse(

@@ -35,7 +35,7 @@ data class PurgeC2SPacket(val pos: BlockPos, val pages: Int) : CustomPacketPaylo
             val player = context.player()
             val sender = context.responseSender()
             if (!Permissions.check(player, "vialogium.networking", CommandConsts.PERMISSION_LEVEL) ||
-                !Permissions.check(player, "vialogium.commands.inspect", CommandConsts.PERMISSION_LEVEL)
+                !Permissions.check(player, "vialogium.commands.purge", CommandConsts.PERMISSION_LEVEL)
             ) {
                 ResponseS2CPacket.sendResponse(
                     ResponseContent(

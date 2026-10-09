@@ -18,6 +18,7 @@ import com.viameowts.vialogium.database.RollbackExecutionGuard
 import com.viameowts.vialogium.logInfo
 import com.viameowts.vialogium.utility.Context
 import com.viameowts.vialogium.utility.LiteralNode
+import com.viameowts.vialogium.utility.MeridianaAudit
 import com.viameowts.vialogium.utility.MessageUtils
 import com.viameowts.vialogium.utility.TextColorPallet
 import com.viameowts.vialogium.utility.getWorld
@@ -251,6 +252,11 @@ object RollbackCommand : BuildableCommand {
                     logInfo(
                         "rollback_sla stage=done source=${source.textName} processed=$processed total=$totalActions " +
                             "failed=$totalFailed durationMs=$durationMs actionsPerSec=$actionsPerSec",
+                    )
+                    MeridianaAudit.event(
+                        source.textName,
+                        "WARN",
+                        "/vl rollback: откачено $processed из $totalActions, сбоев $totalFailed, $durationMs мс",
                     )
 
                     source.sendSuccess(

@@ -1,11 +1,13 @@
 package com.viameowts.vialogium.actionutils
 
 import com.viameowts.vialogium.actions.ActionType
+import com.viameowts.vialogium.commands.CommandConsts
 import com.viameowts.vialogium.commands.subcommands.RestoreCommand
 import com.viameowts.vialogium.commands.subcommands.RollbackCommand
 import com.viameowts.vialogium.mixin.preview.ServerEntityAccessor
 import com.viameowts.vialogium.utility.Context
 import com.viameowts.vialogium.utility.TextColorPallet
+import me.lucko.fabric.api.permissions.v0.Permissions
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
@@ -71,6 +73,11 @@ class Preview(private val params: ActionSearchParams, actionCount: Long, player:
 
     fun apply(context: Context) {
         cleanup(context.source.playerOrException)
+        // the preview node alone must not be a way round the rollback node
+        if (!Permissions.check(context.source, "vialogium.commands.rollback", CommandConsts.PERMISSION_LEVEL)) {
+            context.source.sendFailure(Component.literal("No permission: vialogium.commands.rollback"))
+            return
+        }
         when (type) {
             Type.ROLLBACK -> RollbackCommand.rollback(context, params)
             Type.RESTORE -> RestoreCommand.restore(context, params)
