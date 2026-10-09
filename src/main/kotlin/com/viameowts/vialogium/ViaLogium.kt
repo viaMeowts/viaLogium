@@ -22,6 +22,7 @@ import com.viameowts.vialogium.network.packet.action.ActionS2CPacket
 import com.viameowts.vialogium.network.packet.handshake.HandshakeS2CPacket
 import com.viameowts.vialogium.network.packet.response.ResponseS2CPacket
 import com.viameowts.vialogium.registry.ActionRegistry
+import com.viameowts.vialogium.utility.MeridianaAudit
 import com.viameowts.viapanel.api.ViaPanelApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
@@ -103,6 +104,7 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
         config = realConfig
 
         ViaPanelApi.register(ViaLogiumPanelProvider)
+        registerAuditChecks()
 
         ServerLifecycleEvents.SERVER_STARTING.register(::serverStarting)
         // Drain on STOPPING (worlds still loaded) rather than STOPPED, where overworld() may be
@@ -114,6 +116,27 @@ object ViaLogium : DedicatedServerModInitializer, CoroutineScope {
         PayloadTypeRegistry.clientboundPlay().register(ActionS2CPacket.ID, ActionS2CPacket.CODEC)
         PayloadTypeRegistry.clientboundPlay().register(HandshakeS2CPacket.ID, HandshakeS2CPacket.CODEC)
         PayloadTypeRegistry.clientboundPlay().register(ResponseS2CPacket.ID, ResponseS2CPacket.CODEC)
+    }
+
+    // Health checks for the central audit of meridiana-core (/аудит проверить vialogium.logging)
+    private fun registerAuditChecks() {
+        MeridianaAudit.check("logging", "Запись в базу: очередь не копится, записи не теряются") {
+            val out = mutableListOf<String>()
+            if (!ActionQueueService.healthy) {
+                out +=
+                    "ALERT: запись в базу не удаётся, пачка повторяется (в очереди ${ActionQueueService.size}). Смотрите /vl status и лог сервера"
+            }
+            if (ActionQueueService.isCritical) {
+                out += "WARN: очередь в режиме ${ActionQueueService.mode}: часть действий может отбрасываться"
+            }
+            if (ActionQueueService.dropped > 0) {
+                out += "WARN: отброшено действий с запуска: ${ActionQueueService.dropped}"
+            }
+            if (out.isEmpty()) {
+                out += "Запись идёт: в очереди ${ActionQueueService.size}, база ${DatabaseManager.databaseType}"
+            }
+            out
+        }
     }
 
     @Suppress("TooGenericExceptionCaught") // a failure here must not take the server down

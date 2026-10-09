@@ -12,6 +12,7 @@ import com.viameowts.vialogium.config.config
 import com.viameowts.vialogium.logInfo
 import com.viameowts.vialogium.logWarn
 import com.viameowts.vialogium.registry.ActionRegistry
+import com.viameowts.vialogium.utility.MeridianaAudit
 import com.viameowts.vialogium.utility.Negatable
 import com.viameowts.vialogium.utility.PlayerResult
 import com.viameowts.vialogium.utility.ServerIdentity
@@ -353,6 +354,7 @@ object DatabaseManager {
                 (Tables.Actions.server eq ServerIdentity.id)
         }
         logInfo("Successfully purged $deleted actions")
+        MeridianaAudit.event("auto-purge", "INFO", "автоочистка: удалено записей старше $days дн.: $deleted")
     }
 
     suspend fun searchActions(params: ActionSearchParams, page: Int): SearchResults = read {
